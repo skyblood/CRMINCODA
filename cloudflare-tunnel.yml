@@ -1,0 +1,17 @@
+# Cloudflare Tunnel config — coloca este archivo en ~/.cloudflared/config.yml
+# o pásalo con: cloudflared tunnel --config cloudflare-tunnel.yml run
+#
+# Pasos:
+#   1. cloudflared login
+#   2. cloudflared tunnel create crmincoda
+#   3. Actualiza tunnel: con el UUID que te dio el paso 2
+#   4. En Cloudflare Dashboard → Zero Trust → Tunnels → agrega el CNAME
+#   5. cloudflared tunnel --config cloudflare-tunnel.yml run
+
+tunnel: TU_TUNNEL_UUID
+credentials-file: /root/.cloudflared/TU_TUNNEL_UUID.json
+
+ingress:
+  - hostname: crm.tudominio.com
+    service: http://localhost:3001
+  - service: http_status:404

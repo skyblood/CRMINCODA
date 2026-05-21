@@ -1,0 +1,89 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CRM BLACKMOON</title>
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#410074" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CRM-BM" />
+
+    <style>
+      body { font-family: 'Inter', sans-serif; }
+
+      /* ── Blackmoon Brand Overrides ─────────────────────────────────────────
+         Replace Tailwind blue-600 primary with bm-600 (#410074) everywhere
+         blue is used as an interactive / CTA / active indicator colour.
+      ──────────────────────────────────────────────────────────────────────── */
+
+      /* Buttons & solid fills */
+      .bg-blue-600  { background-color: #410074 !important; }
+      .bg-blue-700  { background-color: #25024C !important; }
+      .hover\:bg-blue-700:hover { background-color: #25024C !important; }
+      .hover\:bg-blue-600:hover { background-color: #410074 !important; }
+
+      /* Light tint backgrounds */
+      .bg-blue-50   { background-color: #E5E4F0 !important; }
+      .bg-blue-100  { background-color: #E5E4F0 !important; }
+      .hover\:bg-blue-50:hover  { background-color: #E5E4F0 !important; }
+      .hover\:bg-blue-100:hover { background-color: #E5E4F0 !important; }
+
+      /* Text */
+      .text-blue-600 { color: #410074 !important; }
+      .text-blue-700 { color: #25024C !important; }
+      .text-blue-500 { color: #410074 !important; }
+
+      /* Borders */
+      .border-blue-600 { border-color: #410074 !important; }
+      .border-blue-200 { border-color: #B9B7C9 !important; }
+      .border-blue-100 { border-color: #E5E4F0 !important; }
+
+      /* Focus rings */
+      .focus\:ring-blue-100:focus { --tw-ring-color: #E5E4F066; }
+      .focus\:ring-2:focus        { --tw-ring-color: #41007433; }
+
+      /* ── Print / PDF export ──────────────────────────────────────────────── */
+      @media print {
+        body > #root > * { display: none !important; }
+        body > #root .crm-print-target { display: block !important; }
+        .crm-print-target { position: fixed; inset: 0; background: white; z-index: 9999; padding: 32px; }
+        @page { size: A4; margin: 20mm; }
+      }
+
+      /* Tab active indicators */
+      .border-blue-500  { border-color: #410074 !important; }
+      .border-b-blue-600 { border-bottom-color: #410074 !important; }
+
+      /* Indigo → bm-600 (used for Fabian shares, some badges) */
+      .bg-indigo-600  { background-color: #410074 !important; }
+      .bg-indigo-700  { background-color: #25024C !important; }
+      .hover\:bg-indigo-700:hover { background-color: #25024C !important; }
+      .bg-indigo-50   { background-color: #E5E4F0 !important; }
+      .bg-indigo-100  { background-color: #E5E4F0 !important; }
+      .text-indigo-600 { color: #410074 !important; }
+      .text-indigo-700 { color: #25024C !important; }
+      .border-indigo-200 { border-color: #B9B7C9 !important; }
+
+      /* User avatar chip in header */
+      .from-indigo-100 { --tw-gradient-from: #E5E4F0; }
+      .to-purple-100   { --tw-gradient-to:   #E5E4F0; }
+      .text-indigo-700 { color: #410074 !important; }
+      .border-indigo-200 { border-color: #B9B7C9 !important; }
+
+      /* ── Mobile Touch Targets ─────────────────────────────────────────────── */
+      @media (max-width: 767px) {
+        button, [role="button"], a[href] { min-height: 44px; display: flex; align-items: center; }
+      }
+    </style>
+</head>
+  <body class="bg-gray-50 text-gray-900">
+    <div id="root"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"></script>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

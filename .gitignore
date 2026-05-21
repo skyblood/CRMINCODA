@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+server/cert.pem
+server/cert-key.pem
+.gstack/
+service-account.json
+*.pem
+

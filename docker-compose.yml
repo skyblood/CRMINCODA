@@ -1,0 +1,25 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: crmincoda-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: crm_incoda
+
+  app:
+    build: .
+    container_name: crmincoda-app
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file: .env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/crm_incoda
+      NODE_ENV: production
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:

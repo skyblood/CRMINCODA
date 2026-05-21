@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" fill="none">
+  <!-- Moon icon -->
+  <path d="M30 10 C18 10 8 20 8 32 C8 44 18 54 30 54 C36 54 41 51.5 45 47.5 C41 48.5 37 49 33 48 C21 45 13 34 16 22 C18 15 23 10 30 10Z" fill="#410074"/>
+  <!-- BLACKMOON wordmark -->
+  <text x="58" y="40" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="26" fill="#410074" letter-spacing="-0.5">BLACKMOON</text>
+  <!-- Tagline -->
+  <text x="59" y="52" font-family="Arial, sans-serif" font-size="9" fill="#7C3AED" letter-spacing="3">CONSULTING</text>
+</svg>

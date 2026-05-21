@@ -1,0 +1,87 @@
+{
+  "name": "crm-blackmoon",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0",
+    "npm": "BLOQUEADO — usa pnpm"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "mongodb-memory-server"
+    ],
+    "overrides": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    }
+  },
+  "mongodbMemoryServer": {
+    "systemBinary": "/opt/homebrew/bin/mongod",
+    "systemBinaryVersionCheck": false
+  },
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/index.js",
+    "dev:full": "concurrently -k -n server,vite -c blue,cyan \"node server/index.js\" \"vite\"",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "node --import tsx/esm --test tests/*.test.ts",
+    "test:watch": "node --import tsx/esm --test --watch tests/*.test.ts",
+    "start": "pnpm build && node server/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource/inter": "^5.2.8",
+    "@google/genai": "^1.47.0",
+    "@hookform/resolvers": "~3.9.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^4.21.0",
+    "express-rate-limit": "^8.3.1",
+    "express-session": "^1.19.0",
+    "googleapis": "^144.0.0",
+    "helmet": "^8.1.0",
+    "lucide-react": "^0.300.0",
+    "mongodb-memory-server": "^10.4.0",
+    "mongoose": "^8.8.0",
+    "nanoid": "^5.1.7",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "~7.53.2",
+    "react-router-dom": "^6.20.0",
+    "recharts": "^2.10.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/supertest": "^7.2.0",
+    "@vitejs/plugin-react": "~4.3.4",
+    "@vitest/ui": "^2.1.9",
+    "autoprefixer": "^10.4.27",
+    "concurrently": "^9.2.1",
+    "happy-dom": "^20.8.9",
+    "postcss": "^8.5.8",
+    "supertest": "^7.2.2",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.21.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8",
+    "vitest": "^2.1.9"
+  }
+}
