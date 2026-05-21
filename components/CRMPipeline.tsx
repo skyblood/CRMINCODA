@@ -19,7 +19,7 @@ function skuCategoryToProjectType(cat: SKUCategory): ProjectType {
   switch (cat) {
     case 'license':           return 'license';
     case 'vendor_support':
-    case 'blackmoon_support': return 'support';
+    case 'incoda_support': return 'support';
     case 'implementation':    return 'implementation';
     case 'hours_pack':        return 'hours_pack';
     default:                  return 'implementation';
@@ -160,7 +160,7 @@ const STAGE_CONFIG: {
 const SKU_CATEGORIES: { key: SKUCategory; label: string }[] = [
     { key: 'license', label: 'License' },
     { key: 'vendor_support', label: 'Vendor Support' },
-    { key: 'blackmoon_support', label: 'BlackMoon Support' },
+    { key: 'incoda_support', label: 'Incoda Support' },
     { key: 'implementation', label: 'Implementation' },
     { key: 'hours_pack', label: 'Hours Pack' },
 ];
@@ -3264,8 +3264,8 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                               <div className="space-y-3">
                                   {activeLead.items.filter(i => i.category === 'license').map(item => {
                                       const vendorCost = item.unitCost * item.quantity;
-                                      const blackmoonMargin = item.unitPrice * item.quantity - vendorCost;
-                                      const marginPct = vendorCost > 0 ? (blackmoonMargin / vendorCost * 100).toFixed(1) : '0';
+                                      const incodaMargin = item.unitPrice * item.quantity - vendorCost;
+                                      const marginPct = vendorCost > 0 ? (incodaMargin / vendorCost * 100).toFixed(1) : '0';
                                       const missingDate = !item.billingDate;
                                       return (
                                           <div key={item.id} className={`bg-white border rounded-lg p-3 ${missingDate ? 'border-yellow-300 bg-yellow-50/30' : 'border-green-100'}`}>
@@ -3292,8 +3292,8 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                                                       <p className="font-bold text-orange-700">${vendorCost.toLocaleString()}</p>
                                                   </div>
                                                   <div className="bg-green-50 rounded p-2 text-center">
-                                                      <p className="text-green-600 mb-0.5">Blackmoon Margin</p>
-                                                      <p className="font-bold text-green-700">${blackmoonMargin.toLocaleString()}</p>
+                                                      <p className="text-green-600 mb-0.5">Incoda Margin</p>
+                                                      <p className="font-bold text-green-700">${incodaMargin.toLocaleString()}</p>
                                                       <p className="text-green-500 text-[10px]">{marginPct}%</p>
                                                   </div>
                                               </div>

@@ -300,7 +300,7 @@ function buildTechnicalProposalHtml(lead) {
   </ol>
 
   <div style="margin-top:40px;padding-top:16px;border-top:2px solid #410074;font-size:12px;color:#888;">
-    <p>Blackmoon Consulting · Documento generado automáticamente desde CRM Blackmoon</p>
+    <p>Incoda Consulting · Documento generado automáticamente desde CRM Incoda</p>
   </div>
 
 </body>

@@ -25,7 +25,7 @@ function calcSoldValue(project, lead) {
   const typeCategories = {
     implementation: ['implementation'],
     license: ['license'],
-    support: ['vendor_support', 'blackmoon_support'],
+    support: ['vendor_support', 'incoda_support'],
     hours_pack: ['hours_pack'],
   };
   const matchingCats = typeCategories[project.type] || [];

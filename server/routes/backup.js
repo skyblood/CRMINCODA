@@ -63,7 +63,7 @@ router.get('/', async (_req, res) => {
         res.json({
             version: '3.0',
             timestamp: new Date().toISOString(),
-            system: 'CRM_BLACKMOON_LOCAL',
+            system: 'CRM_INCODA_LOCAL',
             data: {
                 leads, projects, users, templates, skus, transactions, contacts, goals,
                 invoices, payments, balanceSheetAccounts, balanceSheetNotes,
@@ -82,7 +82,7 @@ router.post('/restore', async (req, res) => {
         let dataToRestore = req.body;
 
         // Support both raw data and wrapped { system, data } format
-        if (dataToRestore.system === 'CRM_BLACKMOON_LOCAL' && dataToRestore.data) {
+        if (dataToRestore.system === 'CRM_INCODA_LOCAL' && dataToRestore.data) {
             dataToRestore = dataToRestore.data;
         }
 

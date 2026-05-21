@@ -46,6 +46,11 @@ router.post('/login', async (req, res) => {
             safeUser.canApproveCosting = safeUser.role === 'admin';
         }
 
+        // Ensure permissions always has a valid structure (.lean() skips Mongoose defaults)
+        if (!safeUser.permissions || typeof safeUser.permissions !== 'object') {
+            safeUser.permissions = { dashboard: false, crm: false, projects: false, portal: true, admin: false };
+        }
+
         // Admin role always gets full permissions regardless of what's stored in DB
         if (safeUser.role === 'admin') {
             safeUser.permissions = {
@@ -75,9 +80,14 @@ router.get('/me', (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'Not authenticated.' });
 
     const user = req.session.user;
-    // Ensure canApproveCosting is set correctly (admin users can approve)
     if (user.canApproveCosting === undefined || user.canApproveCosting === null) {
         user.canApproveCosting = user.role === 'admin';
+    }
+    if (!user.permissions || typeof user.permissions !== 'object') {
+        user.permissions = { dashboard: false, crm: false, projects: false, portal: true, admin: false };
+    }
+    if (user.role === 'admin') {
+        user.permissions = { ...user.permissions, admin: true, dashboard: true, crm: true, projects: true };
     }
 
     res.json(user);
@@ -150,7 +160,7 @@ router.post('/forgot-password', async (req, res) => {
                 await transporter.sendMail({
                     from: SMTP_FROM || SMTP_USER,
                     to: user.email,
-                    subject: 'CRM Blackmoon — Password Reset',
+                    subject: 'CRM Incoda — Password Reset',
                     html: `<p>Hi ${user.name},</p>
                            <p>Click the link below to reset your password. It expires in 1 hour.</p>
                            <p><a href="${resetUrl}">${resetUrl}</a></p>

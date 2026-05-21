@@ -90,7 +90,7 @@ export interface AutomationRule {
  * TABLE: sku_catalog
  * PK: id
  */
-export type SKUCategory = 'license' | 'vendor_support' | 'blackmoon_support' | 'implementation' | 'hours_pack';
+export type SKUCategory = 'license' | 'vendor_support' | 'incoda_support' | 'implementation' | 'hours_pack';
 
 export interface SKUItem {
   id: string; // UUID

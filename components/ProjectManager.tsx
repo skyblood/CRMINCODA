@@ -1796,7 +1796,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ projects, update
                       </div>
                       <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
-                          <input type="text" className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="e.g. Blackmoon Internal" value={newProjectForm.clientName} onChange={e => setNewProjectForm(f => ({ ...f, clientName: e.target.value }))} />
+                          <input type="text" className="w-full border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="e.g. Incoda Internal" value={newProjectForm.clientName} onChange={e => setNewProjectForm(f => ({ ...f, clientName: e.target.value }))} />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                           <div>

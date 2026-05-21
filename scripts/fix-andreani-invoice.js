@@ -16,7 +16,7 @@ import Project from '../server/models/Project.js';
 import Lead from '../server/models/Lead.js';
 import Settings from '../server/models/Settings.js';
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_blackmoon';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
 
 async function run() {
   await mongoose.connect(MONGO_URI);

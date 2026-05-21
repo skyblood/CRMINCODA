@@ -28,7 +28,7 @@ import Lead from '../models/Lead.js';
 import Transaction from '../models/Transaction.js';
 import Commission from '../models/Commission.js';
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_blackmoon';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
 
 async function migrate() {
   console.log('Connecting to', MONGO_URI);
@@ -98,10 +98,10 @@ async function migrate() {
     const commissionAmount = netUtility > 0 ? netUtility * (rate / 100) : 0;
 
     // Split
-    const blackMoonUtility = netUtility - commissionAmount;
-    const bmRetained = blackMoonUtility * 0.40;
-    const fabianShare = blackMoonUtility * 0.30;
-    const spencerShare = blackMoonUtility * 0.30;
+    const incodaUtility = netUtility - commissionAmount;
+    const bmRetained = incodaUtility * 0.40;
+    const fabianShare = incodaUtility * 0.30;
+    const spencerShare = incodaUtility * 0.30;
 
     // Determine payment status from consultant_payment transactions
     const commissionPayments = transactions.filter(t =>

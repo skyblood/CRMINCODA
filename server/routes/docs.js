@@ -12,7 +12,7 @@ const spec = swaggerJsdoc({
     definition: {
         openapi: '3.0.0',
         info: {
-            title: 'CRM Blackmoon API',
+            title: 'CRM Incoda API',
             version: '1.0.0',
             description: 'Internal CRM API — session auth required. External consumers use /api/v1/ with API key.',
         },
@@ -29,7 +29,7 @@ const spec = swaggerJsdoc({
 });
 
 router.use('/', swaggerUi.serve);
-router.get('/', swaggerUi.setup(spec, { customSiteTitle: 'CRM Blackmoon API Docs' }));
+router.get('/', swaggerUi.setup(spec, { customSiteTitle: 'CRM Incoda API Docs' }));
 router.get('/json', (_req, res) => res.json(spec));
 
 export default router;

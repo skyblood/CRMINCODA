@@ -16,7 +16,7 @@ describe('calcCommission', () => {
     it('splits a positive utility at the default 10% rate', () => {
         const r = calcCommission(100_000);
         assert.equal(r.commissionAmount, 10_000);
-        assert.equal(r.blackMoonUtility, 90_000);
+        assert.equal(r.incodaUtility, 90_000);
         assert.ok(Math.abs(r.bmRetained - 36_000) < 0.01);
         assert.ok(Math.abs(r.fabianShare - 27_000) < 0.01);
         assert.ok(Math.abs(r.spencerShare - 27_000) < 0.01);
@@ -25,24 +25,24 @@ describe('calcCommission', () => {
     it('splits using a custom commission rate', () => {
         const r = calcCommission(200_000, 15);
         assert.equal(r.commissionAmount, 30_000);
-        assert.equal(r.blackMoonUtility, 170_000);
+        assert.equal(r.incodaUtility, 170_000);
     });
 
     it('returns zero commission when utility is zero', () => {
         const r = calcCommission(0);
         assert.equal(r.commissionAmount, 0);
-        assert.equal(r.blackMoonUtility, 0);
+        assert.equal(r.incodaUtility, 0);
     });
 
     it('returns zero commission when utility is negative (loss)', () => {
         const r = calcCommission(-5_000);
         assert.equal(r.commissionAmount, 0);
-        assert.equal(r.blackMoonUtility, -5_000);
+        assert.equal(r.incodaUtility, -5_000);
     });
 
-    it('internal shares always sum to blackMoonUtility (40+30+30=100%)', () => {
+    it('internal shares always sum to incodaUtility (40+30+30=100%)', () => {
         const r = calcCommission(75_000, 8);
-        assert.ok(Math.abs(r.bmRetained + r.fabianShare + r.spencerShare - r.blackMoonUtility) < 0.01);
+        assert.ok(Math.abs(r.bmRetained + r.fabianShare + r.spencerShare - r.incodaUtility) < 0.01);
     });
 });
 

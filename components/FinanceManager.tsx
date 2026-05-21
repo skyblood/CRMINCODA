@@ -216,9 +216,9 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ projects, users,
           const fiscalYear = lineItem?.licenseYear ?? t.licenseYear ?? new Date(billingDateStr).getFullYear();
           if (fiscalYear === selectedYear) {
             const vendorCost = lineItem ? lineItem.unitCost * lineItem.quantity : 0;
-            const blackmoonMargin = t.amount - vendorCost;
+            const incodaMargin = t.amount - vendorCost;
             const incomeDate = new Date(billingDateStr);
-            stats[incomeDate.getMonth()].income += blackmoonMargin;
+            stats[incomeDate.getMonth()].income += incodaMargin;
           }
         } else {
           // Regular income: use paymentDate → billingDate → date
@@ -412,7 +412,7 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ projects, users,
     }).map(project => {
         const lead = leads.find(l => l.id === project.leadId);
 
-        // For license items: receivable = Blackmoon margin (Sell Price - Cost) only
+        // For license items: receivable = Incoda margin (Sell Price - Cost) only
         // For non-license items: receivable = full sell price
         let contractValue = project.value || 0;
 
@@ -1459,7 +1459,7 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ projects, users,
                                           <tr>
                                               <th className="p-4 font-medium">Project</th>
                                               <th className="p-4 font-medium">Client</th>
-                                              <th className="p-4 text-right">Blackmoon Margin {selectedYear}</th>
+                                              <th className="p-4 text-right">Incoda Margin {selectedYear}</th>
                                               <th className="p-4 text-right">Total Paid</th>
                                               <th className="p-4 text-right">Balance Due</th>
                                               <th className="p-4 w-48 text-center">Payment Progress</th>

@@ -1,5 +1,5 @@
 /**
- * Email Service — CRM Blackmoon
+ * Email Service — CRM Incoda
  * Sends transactional emails via SMTP (nodemailer).
  * Configure via environment variables (see .env.example).
  */
@@ -85,7 +85,7 @@ export const sendLeadWonNotification = async (lead, adminUsers) => {
                         </div>
                       </td>
                       <td style="vertical-align:middle;">
-                        <span style="color:#B9B7C9;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">CRM BLACKMOON</span>
+                        <span style="color:#B9B7C9;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">CRM INCODA</span>
                       </td>
                     </tr>
                   </table>
@@ -159,7 +159,7 @@ export const sendLeadWonNotification = async (lead, adminUsers) => {
             <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:10px;overflow:hidden;background:#090812;padding:20px 24px;">
               <tr>
                 <td style="padding:20px 24px;">
-                  <p style="margin:0 0 4px;font-size:11px;color:#B9B7C9;font-weight:700;letter-spacing:1px;text-transform:uppercase;">CRM-BLACKMOON</p>
+                  <p style="margin:0 0 4px;font-size:11px;color:#B9B7C9;font-weight:700;letter-spacing:1px;text-transform:uppercase;">CRM-INCODA</p>
                   <p style="margin:0;font-size:12px;color:#E5E4F0;opacity:0.6;">This email was generated automatically. Please do not reply directly.</p>
                 </td>
               </tr>
@@ -178,7 +178,7 @@ export const sendLeadWonNotification = async (lead, adminUsers) => {
 </body>
 </html>`;
 
-    const textBody = `LEAD WON — CRM Blackmoon
+    const textBody = `LEAD WON — CRM Incoda
 
 Company:      ${lead.companyName || '—'}
 Contact:      ${lead.contactName || '—'}
@@ -311,7 +311,7 @@ export const sendMonthlyPendingPaymentReport = async (adminUsers, projects) => {
                         </div>
                       </td>
                       <td style="vertical-align:middle;">
-                        <span style="color:#B9B7C9;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">CRM BLACKMOON</span>
+                        <span style="color:#B9B7C9;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">CRM INCODA</span>
                       </td>
                     </tr>
                   </table>
@@ -371,7 +371,7 @@ export const sendMonthlyPendingPaymentReport = async (adminUsers, projects) => {
             <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:10px;overflow:hidden;background:#090812;">
               <tr>
                 <td style="padding:20px 24px;">
-                  <p style="margin:0 0 4px;font-size:11px;color:#B9B7C9;font-weight:700;letter-spacing:1px;text-transform:uppercase;">CRM-BLACKMOON</p>
+                  <p style="margin:0 0 4px;font-size:11px;color:#B9B7C9;font-weight:700;letter-spacing:1px;text-transform:uppercase;">CRM-INCODA</p>
                   <p style="margin:0;font-size:12px;color:#E5E4F0;opacity:0.6;">Automated monthly report · Go to the Time Approval Center to mark hours as paid.</p>
                 </td>
               </tr>
@@ -387,7 +387,7 @@ export const sendMonthlyPendingPaymentReport = async (adminUsers, projects) => {
 </html>`;
 
     const textLines = [
-        `MONTHLY PENDING PAYMENT REPORT — CRM Blackmoon`,
+        `MONTHLY PENDING PAYMENT REPORT — CRM Incoda`,
         `Period: ${reportDate}`,
         ``,
         `SUMMARY`,
@@ -402,7 +402,7 @@ export const sendMonthlyPendingPaymentReport = async (adminUsers, projects) => {
             ...Object.entries(data.projects).map(([pName, p]) => `    ↳ ${pName}: ${fmtH(p.hours)} — ${fmt(p.cost)}`)
         ]),
         ``,
-        `--- Generated automatically by CRM-BLACKMOON ---`
+        `--- Generated automatically by CRM-INCODA ---`
     ];
 
     try {

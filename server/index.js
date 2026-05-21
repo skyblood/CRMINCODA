@@ -1,6 +1,6 @@
 /**
  * ==================================================================================
- * 🖥️ BACKEND SERVER - CRM BLACKMOON
+ * 🖥️ BACKEND SERVER - CRM INCODA
  * ==================================================================================
  *
  * Express + Mongoose connected to local MongoDB.
@@ -109,9 +109,10 @@ app.use(helmet({
             styleSrc:    ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://fonts.googleapis.com"],
             fontSrc:     ["'self'", "data:", "https://fonts.gstatic.com"],
             imgSrc:      ["'self'", "data:", "blob:"],
-            connectSrc:  ["'self'", "ws://localhost:3001", "wss://localhost:3001"],
+            connectSrc:  ["'self'", "ws:", "wss:"],
             objectSrc:   ["'none'"],
             frameAncestors: ["'none'"],
+            upgradeInsecureRequests: null,
         },
     },
 }));
@@ -188,9 +189,9 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        httpOnly: true,               // no accesible desde JS del cliente
-        secure: IS_PROD,              // solo HTTPS en producción
-        sameSite: IS_PROD ? 'strict' : 'lax',
+        httpOnly: true,
+        secure: IS_PROD && existsSync(join(__dirname, 'cert.pem')),   // solo si hay HTTPS real
+        sameSite: 'lax',
         maxAge: 8 * 60 * 60 * 1000   // 8 horas
     }
 }));
@@ -319,7 +320,7 @@ if (existsSync(distPath)) {
 // ==================== MONGODB CONNECTION ====================
 const connectDB = async () => {
     // Try local MongoDB first
-    const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/crm_blackmoon';
+    const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
 
     try {
         await mongoose.connect(MONGO_URI);

@@ -7,7 +7,7 @@ interface ProposalContent {
   executiveSummary: string;
   solutionOverview: string;
   methodology: string;
-  whyBlackmoon: string;
+  whyIncoda: string;
   nextSteps: string;
   generatedAt?: string;
 }
@@ -40,7 +40,7 @@ const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', c
 const CATEGORY_LABELS: Record<string, string> = {
   license: 'Software License',
   vendor_support: 'Vendor Support',
-  blackmoon_support: 'Blackmoon Support',
+  incoda_support: 'Incoda Support',
   implementation: 'Implementation',
   hours_pack: 'Hours Pack',
 };
@@ -503,13 +503,13 @@ export function ProposalPrint({ lead, onClose }: Props) {
           <div className="flex items-start justify-between">
             <div>
               <img
-                src="/blackmoon-logo.svg"
-                alt="Blackmoon Consulting"
+                src="/incoda-logo.svg"
+                alt="Incoda Consulting"
                 style={{ height: 52, width: 'auto' }}
                 onError={(e) => {
                   const el = e.currentTarget;
                   el.style.display = 'none';
-                  el.insertAdjacentHTML('afterend', '<div style="font-size:22px;font-weight:900;color:#410074;letter-spacing:-0.5px">BLACKMOON<div style="font-size:9px;color:#7C3AED;letter-spacing:3px;font-weight:400">CONSULTING</div></div>');
+                  el.insertAdjacentHTML('afterend', '<div style="font-size:22px;font-weight:900;color:#410074;letter-spacing:-0.5px">INCODA<div style="font-size:9px;color:#7C3AED;letter-spacing:3px;font-weight:400">CONSULTING</div></div>');
                 }}
               />
             </div>
@@ -546,7 +546,7 @@ export function ProposalPrint({ lead, onClose }: Props) {
               { title: 'Resumen Ejecutivo',       key: 'executiveSummary' },
               { title: 'Visión General de la Solución', key: 'solutionOverview' },
               { title: 'Metodología de Implementación', key: 'methodology' },
-              { title: 'Por qué Blackmoon Consulting',  key: 'whyBlackmoon' },
+              { title: 'Por qué Incoda Consulting',  key: 'whyIncoda' },
               { title: 'Próximos Pasos',           key: 'nextSteps' },
             ];
             return (
@@ -667,8 +667,8 @@ export function ProposalPrint({ lead, onClose }: Props) {
           )}
 
           <div className="border-t border-gray-100 pt-6 text-xs text-gray-400 flex justify-between">
-            <span>Blackmoon Consulting · This proposal is valid for 30 days from the date above.</span>
-            <span style={{ color: '#410074' }}>blackmoon.com</span>
+            <span>Incoda Consulting · This proposal is valid for 30 days from the date above.</span>
+            <span style={{ color: '#410074' }}>incoda.com</span>
           </div>
         </div>}
       </div>

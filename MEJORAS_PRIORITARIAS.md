@@ -1,4 +1,4 @@
-# CRM Blackmoon — Plan de Mejoras Prioritarias
+# CRM Incoda — Plan de Mejoras Prioritarias
 > Generado: 2026-04-01
 
 ## Scores Actuales por Módulo

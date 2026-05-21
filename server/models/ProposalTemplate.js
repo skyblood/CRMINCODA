@@ -16,13 +16,13 @@ import mongoose from 'mongoose';
  *
  * AI-GENERATED (requires running /api/proposals/generate first):
  *   {{ai_executive_summary}}  {{ai_solution_overview}}
- *   {{ai_methodology}}        {{ai_why_blackmoon}}  {{ai_next_steps}}
+ *   {{ai_methodology}}        {{ai_why_incoda}}  {{ai_next_steps}}
  *
  * PRICING:
  *   {{items_table}}   {{total_value}}
  *
  * ASSETS:
- *   {{logo_url}}   (URL to /blackmoon-logo.svg)
+ *   {{logo_url}}   (URL to /incoda-logo.svg)
  */
 const ProposalTemplateSchema = new mongoose.Schema({
     id:          { type: String, required: true, unique: true },

@@ -7,10 +7,10 @@
 
 export interface CommissionResult {
     commissionAmount: number;   // Factory/partner share
-    blackMoonUtility: number;   // Remaining after factory cut
-    bmRetained: number;         // 40% of blackMoonUtility
-    fabianShare: number;        // 30% of blackMoonUtility
-    spencerShare: number;       // 30% of blackMoonUtility
+    incodaUtility: number;   // Remaining after factory cut
+    bmRetained: number;         // 40% of incodaUtility
+    fabianShare: number;        // 30% of incodaUtility
+    spencerShare: number;       // 30% of incodaUtility
 }
 
 /**
@@ -20,11 +20,11 @@ export interface CommissionResult {
  */
 export const calcCommission = (netUtility: number, commissionRate = 10): CommissionResult => {
     const commissionAmount = netUtility > 0 ? netUtility * (commissionRate / 100) : 0;
-    const blackMoonUtility = netUtility - commissionAmount;
-    const bmRetained    = blackMoonUtility * 0.40;
-    const fabianShare   = blackMoonUtility * 0.30;
-    const spencerShare  = blackMoonUtility * 0.30;
-    return { commissionAmount, blackMoonUtility, bmRetained, fabianShare, spencerShare };
+    const incodaUtility = netUtility - commissionAmount;
+    const bmRetained    = incodaUtility * 0.40;
+    const fabianShare   = incodaUtility * 0.30;
+    const spencerShare  = incodaUtility * 0.30;
+    return { commissionAmount, incodaUtility, bmRetained, fabianShare, spencerShare };
 };
 
 // ── Lead aging ────────────────────────────────────────────────────────────────

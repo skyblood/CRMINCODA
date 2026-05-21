@@ -13,7 +13,7 @@ interface Template {
 const PLACEHOLDERS = [
   { group: 'Cliente', items: ['{{company_name}}', '{{contact_name}}', '{{contact_email}}', '{{contact_phone}}', '{{contact_role}}', '{{country}}', '{{date}}', '{{ref}}', '{{expected_close}}', '{{deal_value}}'] },
   { group: 'Veracode', items: ['{{developer_count}}', '{{profile_count}}', '{{license_years}}', '{{modules_list}}', '{{modules_table}}', '{{notes}}'] },
-  { group: 'IA (requiere generar antes)', items: ['{{ai_executive_summary}}', '{{ai_solution_overview}}', '{{ai_methodology}}', '{{ai_why_blackmoon}}', '{{ai_next_steps}}'] },
+  { group: 'IA (requiere generar antes)', items: ['{{ai_executive_summary}}', '{{ai_solution_overview}}', '{{ai_methodology}}', '{{ai_why_incoda}}', '{{ai_next_steps}}'] },
   { group: 'Precios', items: ['{{items_table}}', '{{total_value}}'] },
   { group: 'Assets', items: ['{{logo_url}}'] },
 ];

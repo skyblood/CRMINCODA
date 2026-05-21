@@ -1,5 +1,5 @@
 
-# Documentación de Arquitectura - CRM BlackMoon
+# Documentación de Arquitectura - CRM Incoda
 
 Esta aplicación es un sistema integral de gestión que combina CRM (Ventas), Gestión de Proyectos y Finanzas. Está construida como una **Single Page Application (SPA)** utilizando React y Vite.
 

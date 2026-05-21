@@ -1,4 +1,4 @@
-# CRM Blackmoon
+# CRM Incoda
 
 Sistema CRM full-stack para gestión de ventas, proyectos, finanzas y consultoría. Cubre el ciclo completo de un negocio de tecnología: desde la captura de un lead hasta el pago de comisiones.
 
@@ -96,7 +96,7 @@ tailwind.config.js       # Paleta bm-* personalizada
 
 - Corre en puerto 3001; Vite hace proxy de `/api/*` a él durante desarrollo.
 - `server/routes/crud.js` exporta `createCrudRouter(Model)` — pasa un modelo Mongoose, obtén REST CRUD completo montado automáticamente.
-- MongoDB conecta a `127.0.0.1:27017/crm_blackmoon`; fallback a `mongodb-memory-server` si la DB real no responde.
+- MongoDB conecta a `127.0.0.1:27017/crm_incoda`; fallback a `mongodb-memory-server` si la DB real no responde.
 - Notificaciones de email se disparan server-side cuando un lead pasa a **Closed Won** (fire-and-forget).
 - Audit log automático en cada mutación de leads y proyectos.
 - `node-cron` ejecuta tareas programadas: reporte mensual de pagos pendientes, limpieza de logs.
@@ -615,7 +615,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=tu_correo@gmail.com
 SMTP_PASSWORD=xxxx xxxx xxxx xxxx   # Gmail App Password
-SMTP_FROM=CRM-BLACKMOON <tu_correo@gmail.com>
+SMTP_FROM=CRM-INCODA <tu_correo@gmail.com>
 NOTIFY_EMAIL=soporte@tuempresa.com
 ```
 
@@ -717,7 +717,7 @@ GET  /api/external/projects   # lista de proyectos
 
 ## Sistema de Diseño
 
-### Paleta Blackmoon (púrpura)
+### Paleta Incoda (púrpura)
 
 | Token | Hex | Uso |
 |---|---|---|
@@ -772,7 +772,7 @@ cp .env.example .env
 
 ```env
 # Base de datos
-MONGO_URI=mongodb://127.0.0.1:27017/crm_blackmoon
+MONGO_URI=mongodb://127.0.0.1:27017/crm_incoda
 
 # Seguridad — OBLIGATORIO cambiar en producción
 SESSION_SECRET=<genera con el comando de abajo>
@@ -784,7 +784,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=tu_correo@gmail.com
 SMTP_PASSWORD=xxxx xxxx xxxx xxxx
-SMTP_FROM=CRM-BLACKMOON <tu_correo@gmail.com>
+SMTP_FROM=CRM-INCODA <tu_correo@gmail.com>
 NOTIFY_EMAIL=soporte@tuempresa.com
 
 # AI — Lead scoring, risk reports y sales forecast (sin esto usa heurística)
@@ -813,7 +813,7 @@ pnpm test:watch   # Vitest en modo watch
 
 | Nombre | Email | Contraseña | Rol |
 |---|---|---|---|
-| Fabian Rojas | fabian@blackmoon.com.co | admin1234 | admin |
+| Fabian Rojas | fabian@incoda.com.co | admin1234 | admin |
 | Kyle Reese | kyle@tech.com | kyle1234 | sales |
 | Sarah Connor | sarah@future.com | sarah1234 | consultant |
 

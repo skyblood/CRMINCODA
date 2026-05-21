@@ -64,7 +64,7 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
             const typeCategories: Record<string, string[]> = {
                 'implementation': ['implementation'],
                 'license': ['license'],
-                'support': ['vendor_support', 'blackmoon_support'],
+                'support': ['vendor_support', 'incoda_support'],
                 'hours_pack': ['hours_pack'],
             };
             const matchingCategories = typeCategories[project.type] || [];
@@ -124,14 +124,14 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
         const rate = project.factoryCommissionRate !== undefined ? project.factoryCommissionRate : 10;
         const commissionAmount = netUtility > 0 ? netUtility * (rate / 100) : 0;
         
-        // BLACKMOON UTILITY & SPLIT
-        const blackMoonUtility = netUtility - commissionAmount;
-        const bmRetained = blackMoonUtility * 0.40;
-        const fabianShare = blackMoonUtility * 0.30;
-        const spencerShare = blackMoonUtility * 0.30;
+        // INCODA UTILITY & SPLIT
+        const incodaUtility = netUtility - commissionAmount;
+        const bmRetained = incodaUtility * 0.40;
+        const fabianShare = incodaUtility * 0.30;
+        const spencerShare = incodaUtility * 0.30;
 
         // MARGINS
-        const finalMarginPercent = soldValue > 0 ? (blackMoonUtility / soldValue) * 100 : 0;
+        const finalMarginPercent = soldValue > 0 ? (incodaUtility / soldValue) * 100 : 0;
 
         return {
             id: project.id,
@@ -148,7 +148,7 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
             netUtility,
             currentCommissionRate: rate,
             commissionAmount,
-            blackMoonUtility,
+            incodaUtility,
             bmRetained,
             fabianShare,
             spencerShare,
@@ -188,13 +188,13 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
           const rate = 10; 
           const commissionAmount = netUtility > 0 ? netUtility * (rate / 100) : 0;
 
-          // BLACKMOON UTILITY & SPLIT
-          const blackMoonUtility = netUtility - commissionAmount;
-          const bmRetained = blackMoonUtility * 0.40;
-          const fabianShare = blackMoonUtility * 0.30;
-          const spencerShare = blackMoonUtility * 0.30;
+          // INCODA UTILITY & SPLIT
+          const incodaUtility = netUtility - commissionAmount;
+          const bmRetained = incodaUtility * 0.40;
+          const fabianShare = incodaUtility * 0.30;
+          const spencerShare = incodaUtility * 0.30;
 
-          const finalMarginPercent = soldValue > 0 ? (blackMoonUtility / soldValue) * 100 : 0;
+          const finalMarginPercent = soldValue > 0 ? (incodaUtility / soldValue) * 100 : 0;
 
           return {
             id: lead.id,
@@ -210,7 +210,7 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
             netUtility,
             currentCommissionRate: rate,
             commissionAmount,
-            blackMoonUtility,
+            incodaUtility,
             bmRetained,
             fabianShare,
             spencerShare,
@@ -242,14 +242,14 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
           cost: acc.cost + curr.totalCost,
           netUtility: acc.netUtility + curr.netUtility,
           commission: acc.commission + curr.commissionAmount,
-          blackMoonUtility: acc.blackMoonUtility + curr.blackMoonUtility,
+          incodaUtility: acc.incodaUtility + curr.incodaUtility,
           bmRetained: acc.bmRetained + curr.bmRetained,
           fabianShare: acc.fabianShare + curr.fabianShare,
           spencerShare: acc.spencerShare + curr.spencerShare
-      }), { revenue: 0, cost: 0, netUtility: 0, commission: 0, blackMoonUtility: 0, bmRetained: 0, fabianShare: 0, spencerShare: 0 });
+      }), { revenue: 0, cost: 0, netUtility: 0, commission: 0, incodaUtility: 0, bmRetained: 0, fabianShare: 0, spencerShare: 0 });
   }, [displayData]);
 
-  const totalFinalMargin = totals.revenue > 0 ? (totals.blackMoonUtility / totals.revenue) * 100 : 0;
+  const totalFinalMargin = totals.revenue > 0 ? (totals.incodaUtility / totals.revenue) * 100 : 0;
 
   // --- BENCHMARK ANALYSIS (NEW) ---
   const benchmarkAnalysis = useMemo(() => {
@@ -276,10 +276,10 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
           
           if (isLicense) {
               licRev += item.soldValue;
-              licUtil += item.blackMoonUtility;
+              licUtil += item.incodaUtility;
           } else {
               servRev += item.soldValue;
-              servUtil += item.blackMoonUtility;
+              servUtil += item.incodaUtility;
           }
       });
 
@@ -329,7 +329,7 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
           d.netUtility,
           d.currentCommissionRate,
           d.commissionAmount,
-          d.blackMoonUtility,
+          d.incodaUtility,
           d.bmRetained,
           d.fabianShare,
           d.spencerShare,
@@ -497,10 +497,10 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
           <div className="bg-gray-900 p-4 rounded-xl shadow-md border border-gray-800 col-span-2 flex items-center justify-between">
               <div>
                   <p className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2">
-                      <DollarSign size={12} className="text-green-400" /> Total BlackMoon Utility
+                      <DollarSign size={12} className="text-green-400" /> Total Incoda Utility
                   </p>
                   <p className="text-3xl font-bold text-white mt-1">
-                      ${totals.blackMoonUtility.toLocaleString()}
+                      ${totals.incodaUtility.toLocaleString()}
                   </p>
               </div>
               <div className="text-right">
@@ -611,8 +611,8 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
                                   </td>
                                   <td className="p-4 text-right bg-gray-50">
                                       <div className="flex flex-col items-end">
-                                          <span className={`font-bold text-base ${row.blackMoonUtility >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                                              ${row.blackMoonUtility.toLocaleString()}
+                                          <span className={`font-bold text-base ${row.incodaUtility >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                              ${row.incodaUtility.toLocaleString()}
                                           </span>
                                           <span className="text-[10px] text-gray-500">{row.finalMarginPercent.toFixed(1)}% margin</span>
                                       </div>
@@ -647,7 +647,7 @@ export const ProfitabilityReport: React.FC<ProfitabilityReportProps> = ({ projec
                                                   </h4>
                                                   <div className="flex gap-4">
                                                       <div className="flex-1 bg-white border border-green-200 rounded-lg p-3 shadow-sm">
-                                                          <p className="text-xs text-gray-500 font-medium">BlackMoon Net (40%)</p>
+                                                          <p className="text-xs text-gray-500 font-medium">Incoda Net (40%)</p>
                                                           <p className="text-lg font-bold text-green-700">${row.bmRetained.toLocaleString()}</p>
                                                       </div>
                                                       <div className="flex-1 bg-white border border-indigo-200 rounded-lg p-3 shadow-sm">

@@ -1,5 +1,5 @@
-<!-- /autoplan restore point: /Users/blackmoon/.gstack/projects/source-Blackmoon-CRM-BD/main-autoplan-restore-20260405-204603.md -->
-# PLAN.md — CRM Blackmoon Evolution
+<!-- /autoplan restore point: /Users/incoda/.gstack/projects/source-Incoda-CRM-BD/main-autoplan-restore-20260405-204603.md -->
+# PLAN.md — CRM Incoda Evolution
 
 > Synthesized from MEJORAS_PRIORITARIAS.md, ROADMAP.md, MEJORAS.md
 > Date: 2026-04-05 | Branch: main
@@ -8,7 +8,7 @@
 
 ## Problem Statement
 
-CRM Blackmoon has best-in-class vertical features (projects, finance, consultant portal) scoring 10/10 in those modules. **Most Phase 2-3 features are already implemented as uncommitted code** — 17 new components exist alongside full backend routes for accounts, automations, analytics, AI reports, and calendar. The actual work is: (1) commit + smoke-test what exists, (2) fill genuine remaining gaps (server-side pagination, form validation, win/loss modal, sales quota, tests).
+CRM Incoda has best-in-class vertical features (projects, finance, consultant portal) scoring 10/10 in those modules. **Most Phase 2-3 features are already implemented as uncommitted code** — 17 new components exist alongside full backend routes for accounts, automations, analytics, AI reports, and calendar. The actual work is: (1) commit + smoke-test what exists, (2) fill genuine remaining gaps (server-side pagination, form validation, win/loss modal, sales quota, tests).
 
 The goal: ship existing code, validate it works end-to-end, then fill real gaps. Not build from scratch.
 
@@ -218,7 +218,7 @@ The goal: ship existing code, validate it works end-to-end, then fill real gaps.
 
 ### 5.1 Multi-tenant
 - `organizationId` field on all collections (Lead, Project, Activity, Account, Pipeline, User, Webhook, AuditLog...).
-- Subdomain routing (`org.crm.blackmoon.io`).
+- Subdomain routing (`org.crm.incoda.io`).
 - All queries scoped by `organizationId` — migration script required for existing data.
 - Stripe billing integration (subscription tiers).
 - Own sub-plan required. Estimated effort: 3-4 sprints minimum.
@@ -517,7 +517,7 @@ Every new feature in the plan must specify:
 ### Architecture ASCII Diagram
 
 ```
-                       CRM Blackmoon — Component Architecture
+                       CRM Incoda — Component Architecture
 ═══════════════════════════════════════════════════════════════════════
 
   Browser
@@ -554,7 +554,7 @@ Every new feature in the plan must specify:
   └─────────────────────────┬───────────────────────────────────────┘
                              │
   ┌──────────────────────────▼──────────────────────────────────────┐
-  │  MongoDB (127.0.0.1:27017/crm_blackmoon)                       │
+  │  MongoDB (127.0.0.1:27017/crm_incoda)                       │
   │  Collections: leads, accounts, automationrules, webhooks...     │
   └─────────────────────────────────────────────────────────────────┘
 
@@ -784,7 +784,7 @@ No `docs/` directory, no API quickstart. Developer must have admin access before
 
 **[HIGH] Webhook contract undocumented**
 `server/webhookService.js` implementation is solid (HMAC-SHA256, exponential backoff, auto-disable, WebhookLog). Zero documentation on: event names, payload shape per event, signature header algorithm, auto-disable conditions.
-**Auto-fix:** Add `docs/webhooks.md`: per-event payload contracts, `X-Blackmoon-Signature` verification example, retry policy, auto-disable threshold.
+**Auto-fix:** Add `docs/webhooks.md`: per-event payload contracts, `X-Incoda-Signature` verification example, retry policy, auto-disable threshold.
 
 **[HIGH] Webhook retry is setTimeout-based (not persistent)**
 Server restart during backoff window silently drops pending retries. No entry in `WebhookLog` for in-flight retries.

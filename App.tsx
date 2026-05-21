@@ -182,7 +182,7 @@ const INITIAL_SKUS: SKUItem[] = [
 
 // DEMO USERS with Costs
 const INITIAL_USERS: (User & { password?: string })[] = [
-  { id: 'u1', name: 'Fabian Rojas', email: 'fabian@blackmoon.com.co', role: 'admin', permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: true }, monthlySalary: 5000, hourlyCost: 50, password: 'admin1234' },
+  { id: 'u1', name: 'Fabian Rojas', email: 'fabian@incoda.com.co', role: 'admin', permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: true }, monthlySalary: 5000, hourlyCost: 50, password: 'admin1234' },
   { id: 'u2', name: 'Sarah Connor', email: 'sarah@future.com', role: 'consultant', permissions: { dashboard: false, crm: false, projects: false, portal: true, admin: false }, monthlySalary: 0, hourlyCost: 90, password: 'sarah1234' },
   { id: 'u3', name: 'Kyle Reese', email: 'kyle@tech.com', role: 'sales', permissions: { dashboard: true, crm: true, projects: false, portal: false, admin: false }, monthlySalary: 3000, hourlyCost: 0, password: 'kyle1234' }
 ];
@@ -348,7 +348,7 @@ const Sidebar: React.FC<{ restoreInputRef: React.RefObject<HTMLInputElement> }> 
         }
     };
 
-    const LOGO_URL = "/blackmoon-logo.svg";
+    const LOGO_URL = "/incoda-logo.svg";
 
     return (
         <>
@@ -368,7 +368,7 @@ const Sidebar: React.FC<{ restoreInputRef: React.RefObject<HTMLInputElement> }> 
                     <img src={LOGO_URL} alt="Logo" className="w-full h-full object-cover transform hover:scale-110 transition duration-300" />
                 </div>
                 <div>
-                    <span className="text-base font-bold tracking-tight leading-tight text-white">CRM BLACKMOON</span>
+                    <span className="text-base font-bold tracking-tight leading-tight text-white">CRM INCODA</span>
                     <div className="w-8 h-0.5 mt-1 rounded-full" style={{ background: 'linear-gradient(90deg, #410074, #B9B7C9)' }} />
                 </div>
             </div>
@@ -394,8 +394,8 @@ const Sidebar: React.FC<{ restoreInputRef: React.RefObject<HTMLInputElement> }> 
                 )}
             </div>
             <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto custom-scrollbar">
-                {currentUser.permissions.dashboard && <NavLink to="/" icon={LayoutDashboard} label="Dashboard" />}
-                {currentUser.permissions.crm && (
+                {currentUser.permissions?.dashboard && <NavLink to="/" icon={LayoutDashboard} label="Dashboard" />}
+                {currentUser.permissions?.crm && (
                     <>
                         <NavLink to="/crm" icon={Users} label="CRM & Sales" />
                         <NavLink to="/contacts" icon={ContactIcon} label="Contacts" />
@@ -403,14 +403,14 @@ const Sidebar: React.FC<{ restoreInputRef: React.RefObject<HTMLInputElement> }> 
                         <NavLink to="/sales-tasks" icon={CheckSquare} label="Sales Tasks" />
                     </>
                 )}
-                {currentUser.permissions.projects && <NavLink to="/projects" icon={FolderKanban} label="Projects" />}
-                {currentUser.permissions.portal && (
+                {currentUser.permissions?.projects && <NavLink to="/projects" icon={FolderKanban} label="Projects" />}
+                {currentUser.permissions?.portal && (
                     <div className="pt-4 mt-4" style={{ borderTop: '1px solid rgba(185,183,201,0.1)' }}>
                         <p className="px-4 text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#B9B7C9' }}>My Workspace</p>
                         <NavLink to="/portal" icon={Briefcase} label="Consultant Portal" />
                     </div>
                 )}
-                {currentUser.permissions.admin && (
+                {currentUser.permissions?.admin && (
                     <div className="pt-4 mt-4" style={{ borderTop: '1px solid rgba(185,183,201,0.1)' }}>
                         <p className="px-4 text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#B9B7C9' }}>System</p>
                         <NavLink to="/pipeline-analytics" icon={TrendingUp} label="Analytics" />
@@ -666,7 +666,7 @@ const AppRoutes: React.FC = () => {
             const typeCategories: Record<ProjectType, string[]> = {
                 'implementation': ['implementation'],
                 'license': ['license'],
-                'support': ['vendor_support', 'blackmoon_support'],
+                'support': ['vendor_support', 'incoda_support'],
                 'hours_pack': ['hours_pack'],
                 'consulting': ['consulting'],
             };
@@ -812,7 +812,7 @@ const AppRoutes: React.FC = () => {
                 } />
                 <Route path="/balance-sheet" element={
                     perm.admin
-                        ? <ErrorBoundary moduleName="Balance Sheet"><BalanceSheet accounts={balanceSheetAccounts} notes={balanceSheetNotes} onAddAccount={handleAddAccount} onUpdateAccount={handleUpdateAccount} onDeleteAccount={handleDeleteAccount} onAddNote={handleAddNote} onUpdateNote={handleUpdateNote} onDeleteNote={handleDeleteNote} companyName="Blackmoon Consulting" /></ErrorBoundary>
+                        ? <ErrorBoundary moduleName="Balance Sheet"><BalanceSheet accounts={balanceSheetAccounts} notes={balanceSheetNotes} onAddAccount={handleAddAccount} onUpdateAccount={handleUpdateAccount} onDeleteAccount={handleDeleteAccount} onAddNote={handleAddNote} onUpdateNote={handleUpdateNote} onDeleteNote={handleDeleteNote} companyName="Incoda Consulting" /></ErrorBoundary>
                         : <Navigate to="/" />
                 } />
                 <Route path="/approval" element={

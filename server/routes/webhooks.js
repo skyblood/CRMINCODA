@@ -89,13 +89,13 @@ router.post('/:id/test', async (req, res) => {
     const payload = JSON.stringify({
       event: 'test.ping',
       timestamp: new Date().toISOString(),
-      data: { message: 'Test from BlackMoon CRM' },
+      data: { message: 'Test from Incoda CRM' },
       metadata: { crmVersion: '1.0.0', triggeredBy: req.session.user?.email || 'admin' }
     });
 
     const headers = {
       'Content-Type': 'application/json',
-      'User-Agent': 'BlackMoon-CRM/1.0',
+      'User-Agent': 'Incoda-CRM/1.0',
       ...Object.fromEntries(webhook.headers || [])
     };
 

@@ -13,7 +13,7 @@ interface SKUManagerProps {
 const SKU_CATEGORIES: { key: SKUCategory; label: string }[] = [
     { key: 'license', label: 'License' },
     { key: 'vendor_support', label: 'Vendor Support' },
-    { key: 'blackmoon_support', label: 'BlackMoon Support' },
+    { key: 'incoda_support', label: 'Incoda Support' },
     { key: 'implementation', label: 'Implementation' },
     { key: 'hours_pack', label: 'Hours Pack' },
 ];

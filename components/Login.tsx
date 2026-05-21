@@ -53,7 +53,7 @@ export const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
       }
   };
 
-  const LOGO_URL = "/blackmoon-logo.svg";
+  const LOGO_URL = "/incoda-logo.svg";
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
@@ -62,13 +62,13 @@ export const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
           <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-lg p-1 overflow-hidden border-4 border-white">
              <img 
                src={LOGO_URL} 
-               alt="CRM BLACKMOON Logo" 
+               alt="CRM INCODA Logo" 
                className="w-full h-full object-cover rounded-full transform hover:scale-105 transition duration-500" 
              />
           </div>
         </div>
         <h2 className="mt-2 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
-          CRM BLACKMOON
+          CRM INCODA
         </h2>
         <div className="mt-2 text-center flex items-center justify-center gap-1 text-sm text-green-600 font-medium">
             <CheckCircle size={14} /> System Ready
@@ -178,7 +178,7 @@ export const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
         </div>
         
         <p className="mt-6 text-center text-xs text-gray-400">
-           &copy; 2024 BlackMoon CRM. Local Version.
+           &copy; 2024 Incoda CRM. Local Version.
         </p>
       </div>
     </div>

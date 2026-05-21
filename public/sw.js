@@ -1,5 +1,5 @@
 /**
- * CRM Blackmoon — Service Worker
+ * CRM Incoda — Service Worker
  * Strategy:
  *   - API calls (/api/*): Network-first, no caching (data freshness is critical)
  *   - Static assets: Cache-first with network fallback

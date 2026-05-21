@@ -1,4 +1,4 @@
-# Análisis de Mejoras — CRM Blackmoon
+# Análisis de Mejoras — CRM Incoda
 
 > Generado: 2026-03-31
 

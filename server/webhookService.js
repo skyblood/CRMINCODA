@@ -12,13 +12,13 @@ async function sendWebhook(webhook, eventType, data, triggeredBy, attempt = 1) {
 
   const headers = {
     'Content-Type': 'application/json',
-    'User-Agent': 'BlackMoon-CRM/1.0',
+    'User-Agent': 'Incoda-CRM/1.0',
     ...Object.fromEntries(webhook.headers || [])
   };
 
   if (webhook.secret) {
     const hmac = crypto.createHmac('sha256', webhook.secret).update(payload).digest('hex');
-    headers['X-Blackmoon-Signature'] = `sha256=${hmac}`;
+    headers['X-Incoda-Signature'] = `sha256=${hmac}`;
   }
 
   const start = Date.now();

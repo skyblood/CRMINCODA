@@ -1,7 +1,7 @@
 {
-  "name": "CRM Blackmoon",
+  "name": "CRM Incoda",
   "short_name": "CRM-BM",
-  "description": "Blackmoon Sales Pipeline & Project Management",
+  "description": "Incoda Sales Pipeline & Project Management",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f9fafb",

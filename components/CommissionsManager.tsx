@@ -33,7 +33,7 @@ interface ProjectCommission {
   netUtility: number;
   commissionRate: number;
   commissionAmount: number;
-  blackMoonUtility: number;
+  incodaUtility: number;
   bmRetained: number;
   fabianShare: number;
   spencerShare: number;
@@ -122,10 +122,10 @@ export const CommissionsManager: React.FC<CommissionsManagerProps> = ({
 
       const commissionRate = project.factoryCommissionRate ?? 10;
       const commissionAmount = netUtility > 0 ? netUtility * (commissionRate / 100) : 0;
-      const blackMoonUtility = netUtility - commissionAmount;
-      const bmRetained = blackMoonUtility * 0.40;
-      const fabianShare = blackMoonUtility * 0.30;
-      const spencerShare = blackMoonUtility * 0.30;
+      const incodaUtility = netUtility - commissionAmount;
+      const bmRetained = incodaUtility * 0.40;
+      const fabianShare = incodaUtility * 0.30;
+      const spencerShare = incodaUtility * 0.30;
 
       const paymentLines: PaymentLine[] = [
         {
@@ -161,7 +161,7 @@ export const CommissionsManager: React.FC<CommissionsManagerProps> = ({
         netUtility,
         commissionRate,
         commissionAmount,
-        blackMoonUtility,
+        incodaUtility,
         bmRetained,
         fabianShare,
         spencerShare,
@@ -190,7 +190,7 @@ export const CommissionsManager: React.FC<CommissionsManagerProps> = ({
 
     commissionsData.forEach(d => {
       totalCommissions += d.commissionAmount;
-      totalBMUtility += d.blackMoonUtility;
+      totalBMUtility += d.incodaUtility;
       totalDistributed += d.fabianShare + d.spencerShare;
 
       d.paymentLines.forEach(line => {
@@ -294,10 +294,10 @@ export const CommissionsManager: React.FC<CommissionsManagerProps> = ({
           <p className="text-xs text-gray-400 mt-1">{commissionsData.length} project(s)</p>
         </div>
 
-        {/* Total Blackmoon Profit */}
+        {/* Total Incoda Profit */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-gray-500">Total Blackmoon Profit</span>
+            <span className="text-sm font-medium text-gray-500">Total Incoda Profit</span>
             <div className="bg-purple-100 p-2 rounded-lg">
               <Wallet className="w-5 h-5 text-purple-500" />
             </div>
@@ -400,7 +400,7 @@ export const CommissionsManager: React.FC<CommissionsManagerProps> = ({
                           <span className="text-sm font-semibold text-orange-600">{fmt(d.commissionAmount)}</span>
                         </td>
                         <td className="px-4 py-4 text-right">
-                          <span className="text-sm font-semibold text-purple-600">{fmt(d.blackMoonUtility)}</span>
+                          <span className="text-sm font-semibold text-purple-600">{fmt(d.incodaUtility)}</span>
                         </td>
                         <td className="px-4 py-4 text-center">
                           {allPaid ? (

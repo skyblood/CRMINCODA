@@ -23,7 +23,7 @@ import Commission from '../server/models/Commission.js';
 import Project from '../server/models/Project.js';
 import Lead from '../server/models/Lead.js';
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_blackmoon';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function header(title) {

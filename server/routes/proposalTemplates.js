@@ -97,7 +97,7 @@ function buildDataMap(lead) {
         ai_executive_summary: pc.executiveSummary  || '',
         ai_solution_overview: pc.solutionOverview  || '',
         ai_methodology:       pc.methodology       || '',
-        ai_why_blackmoon:     pc.whyBlackmoon      || '',
+        ai_why_incoda:     pc.whyIncoda      || '',
         ai_next_steps:        pc.nextSteps         || '',
 
         // Pricing
@@ -105,7 +105,7 @@ function buildDataMap(lead) {
         total_value:  '$' + total.toLocaleString('en-US'),
 
         // Assets
-        logo_url: `${baseUrl}/blackmoon-logo.svg`,
+        logo_url: `${baseUrl}/incoda-logo.svg`,
     };
 }
 

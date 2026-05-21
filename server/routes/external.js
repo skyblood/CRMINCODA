@@ -152,7 +152,7 @@ router.get('/transactions', requireScope('transactions'), async (req, res) => {
 // GET /api/v1/  — discovery endpoint
 router.get('/', (_req, res) => {
     res.json({
-        api: 'CRM Blackmoon External API',
+        api: 'CRM Incoda External API',
         version: '1.0',
         scopes: res.req.apiKey?.scopes || [],
         endpoints: [

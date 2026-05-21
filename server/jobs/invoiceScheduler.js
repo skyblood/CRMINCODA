@@ -112,12 +112,12 @@ async function runDailyInvoiceJob() {
               const { sendEmail } = await import('../emailService.js');
               await sendEmail({
                 to: inv.clientEmail,
-                subject: `[BlackMoon] ${rule.label} — Factura ${inv.invoiceNumber}`,
+                subject: `[Incoda] ${rule.label} — Factura ${inv.invoiceNumber}`,
                 body: `Estimado/a ${inv.clientName},\n\n` +
                   `Le recordamos que la factura ${inv.invoiceNumber} por ${inv.currency} ${inv.balance?.toLocaleString()} ` +
                   `${rule.dayOffset <= 0 ? 'ha vencido' : `vence el ${dueDate.toISOString().split('T')[0]}`}.\n\n` +
                   `Referencia: ${inv.invoiceNumber}\nMonto pendiente: ${inv.currency} ${inv.balance?.toLocaleString()}\n\n` +
-                  `Saludos,\nBlackMoon`,
+                  `Saludos,\nIncoda`,
               });
             } catch (emailErr) {
               await NotificationLog.findOneAndUpdate(

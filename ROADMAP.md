@@ -1,4 +1,4 @@
-# ROADMAP — CRM Blackmoon
+# ROADMAP — CRM Incoda
 
 Producto actual: CRM full-stack con pipeline de ventas, gestión de proyectos, finanzas y portal de consultoría.
 Objetivo: evolucionar de herramienta interna a producto comercializable y escalable.

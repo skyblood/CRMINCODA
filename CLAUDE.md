@@ -69,7 +69,7 @@ When spawning subagents (Agent/Task tool), the routing block is automatically in
 
 ---
 
-# Project: CRM Blackmoon
+# Project: CRM Incoda
 
 ## Commands
 
@@ -121,7 +121,7 @@ Dual-mode service — the name is a historical artifact; it now calls MongoDB:
 
 - Runs on port 3001; Vite proxies `/api/*` to it during development.
 - `server/routes/crud.js` exports `createCrudRouter(Model)` — pass a Mongoose model, get full REST CRUD mounted automatically.
-- MongoDB connects to `127.0.0.1:27017 / crm_blackmoon`; falls back to `mongodb-memory-server` if the real DB is unreachable.
+- MongoDB connects to `127.0.0.1:27017 / crm_incoda`; falls back to `mongodb-memory-server` if the real DB is unreachable.
 - Email notifications fire server-side when a lead transitions to **Closed Won** (fire-and-forget, never blocks the API response).
 
 ### Auth & RBAC

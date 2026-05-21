@@ -19,7 +19,7 @@ function skuCategoryToProjectType(cat: SKUCategory): ProjectType {
   switch (cat) {
     case 'license'           → 'license'
     case 'vendor_support'    → 'support'
-    case 'blackmoon_support' → 'support'
+    case 'incoda_support' → 'support'
     case 'implementation'    → 'implementation'
     case 'hours_pack'        → 'hours_pack'
   }
@@ -37,7 +37,7 @@ function detectProjectTypes(items: LineItem[]): ProjectType[] {
 | `implementation` | → | `implementation` | Servicios de implementación |
 | `license` | → | `license` | Software/Licencias |
 | `vendor_support` | → | `support` | Soporte de terceros |
-| `blackmoon_support` | → | `support` | Soporte propio |
+| `incoda_support` | → | `support` | Soporte propio |
 | `hours_pack` | → | `hours_pack` | Bolsa de horas |
 
 ---

@@ -21,7 +21,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 import Transaction from '../models/Transaction.js';
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_blackmoon';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
 
 const VALID_CATEGORIES = [
   'credit_card', 'office', 'software', 'marketing',

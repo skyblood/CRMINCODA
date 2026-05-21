@@ -1,4 +1,4 @@
-# DESIGN.md — CRM Blackmoon Design System
+# DESIGN.md — CRM Incoda Design System
 
 Source of truth for colors, typography, spacing, and component patterns.
 All overrides live in the `<style>` block in `index.html` — do NOT create separate CSS files.
@@ -16,7 +16,7 @@ All overrides live in the `<style>` block in `index.html` — do NOT create sepa
 | `bm-50`  | `#E5E4F0` | Light backgrounds, tag fills |
 
 ### Semantic mappings (Tailwind override)
-All `blue-*` and `indigo-*` Tailwind classes are remapped to the Blackmoon palette via `!important` in `index.html`. Use standard Tailwind classes — the overrides apply automatically.
+All `blue-*` and `indigo-*` Tailwind classes are remapped to the Incoda palette via `!important` in `index.html`. Use standard Tailwind classes — the overrides apply automatically.
 
 ```
 bg-blue-600    → #410074  (bm-600)

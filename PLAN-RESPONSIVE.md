@@ -1,4 +1,4 @@
-# Plan de Responsive Design — CRM Blackmoon
+# Plan de Responsive Design — CRM Incoda
 
 > **Objetivo**: Hacer que toda la aplicacion CRM sea completamente responsive (mobile-first) sin romper la experiencia desktop existente.
 > **Estado**: SOLO PLAN — no se realizan cambios de codigo.

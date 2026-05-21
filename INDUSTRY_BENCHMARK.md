@@ -1,4 +1,4 @@
-# Benchmark vs. Salesforce — CRM Blackmoon
+# Benchmark vs. Salesforce — CRM Incoda
 
 > Fecha: 2026-04-02 | Versión CRM: 2.0.0
 
@@ -6,7 +6,7 @@
 
 ## Resumen Ejecutivo
 
-| Área | Blackmoon | Salesforce | Gap |
+| Área | Incoda | Salesforce | Gap |
 |------|-----------|------------|-----|
 | Sales Core | 40% | 100% | -60% |
 | Inteligencia Artificial | 71% | 100% | -29% |
@@ -24,7 +24,7 @@
 
 ### 1. Sales Core
 
-| Feature | Salesforce | Blackmoon | Estado |
+| Feature | Salesforce | Incoda | Estado |
 |---------|-----------|-----------|--------|
 | Leads / Oportunidades / Cuentas / Contactos | ✅ | ✅ | Parity |
 | Pipeline Kanban + Vista Lista | ✅ | ✅ | Parity |
@@ -39,7 +39,7 @@
 
 ### 2. Inteligencia Artificial
 
-| Feature | Salesforce | Blackmoon | Estado |
+| Feature | Salesforce | Incoda | Estado |
 |---------|-----------|-----------|--------|
 | AI Score de Leads/Oportunidades | ✅ Einstein | ✅ Gemini/Anthropic | Parity |
 | AI Insights Panel | ✅ Einstein | ✅ Anthropic SDK | Parity |
@@ -51,7 +51,7 @@
 
 ### 3. Automatización
 
-| Feature | Salesforce | Blackmoon | Estado |
+| Feature | Salesforce | Incoda | Estado |
 |---------|-----------|-----------|--------|
 | Automation Rules (triggers básicos) | ✅ | ✅ | Parity |
 | Scheduled tasks (cron) | ✅ | ✅ node-cron | Parity |
@@ -64,7 +64,7 @@
 
 ### 4. Analytics & Reporting
 
-| Feature | Salesforce | Blackmoon | Estado |
+| Feature | Salesforce | Incoda | Estado |
 |---------|-----------|-----------|--------|
 | Dashboard configurable | ✅ | ✅ | Parity |
 | Pipeline Analytics | ✅ | ✅ | Parity |
@@ -77,7 +77,7 @@
 
 ### 5. Integraciones
 
-| Feature | Salesforce | Blackmoon | Estado |
+| Feature | Salesforce | Incoda | Estado |
 |---------|-----------|-----------|--------|
 | Google Calendar | ✅ | ✅ | Parity |
 | API Keys REST | ✅ | ✅ | Parity |
@@ -90,7 +90,7 @@
 
 ### 6. UX & Productividad
 
-| Feature | Salesforce | Blackmoon | Estado |
+| Feature | Salesforce | Incoda | Estado |
 |---------|-----------|-----------|--------|
 | Command Palette (⌘K) | ✅ | ✅ | Parity |
 | Toast / Notificaciones | ✅ | ✅ | Parity |
@@ -104,7 +104,7 @@
 
 ### 7. Seguridad & Compliance
 
-| Feature | Salesforce | Blackmoon | Estado |
+| Feature | Salesforce | Incoda | Estado |
 |---------|-----------|-----------|--------|
 | RBAC (roles) | ✅ | ✅ 3 roles | Parity |
 | Session Auth | ✅ | ✅ | Parity |
@@ -117,7 +117,7 @@
 
 ### 8. Finanzas & Facturación
 
-| Feature | Salesforce | Blackmoon | Estado |
+| Feature | Salesforce | Incoda | Estado |
 |---------|-----------|-----------|--------|
 | Finance Manager | ✅ | ✅ | Parity |
 | Balance Sheet | ✅ | ✅ | Parity |
@@ -246,7 +246,7 @@ Sprint 6:  AI Next Best Action + AI Email Generation + Multi-Currency
 
 ---
 
-## Ventajas Competitivas de Blackmoon vs Salesforce
+## Ventajas Competitivas de Incoda vs Salesforce
 
 | Ventaja | Detalle |
 |---------|---------|

@@ -1,4 +1,4 @@
-# TODOS.md — CRM Blackmoon
+# TODOS.md — CRM Incoda
 > Updated 2026-04-05 — items brought into PLAN.md phases removed; only post-PMF deferred remain.
 
 ## Deferred — Post-PMF

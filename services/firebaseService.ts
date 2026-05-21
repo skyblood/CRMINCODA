@@ -412,7 +412,7 @@ export const backupLocalData = async (): Promise<string> => {
     return JSON.stringify({
         version: "2.0",
         timestamp: new Date().toISOString(),
-        system: "CRM_BLACKMOON_LOCAL",
+        system: "CRM_INCODA_LOCAL",
         data: localStore
     }, null, 2);
 };
@@ -425,7 +425,7 @@ export const restoreLocalData = (jsonString: string): boolean => {
         const parsed = JSON.parse(jsonString);
         let dataToRestore = parsed;
 
-        if (parsed.system === "CRM_BLACKMOON_LOCAL" && parsed.data) {
+        if (parsed.system === "CRM_INCODA_LOCAL" && parsed.data) {
             dataToRestore = parsed.data;
         } else if (!Array.isArray(parsed) && !parsed.leads && !parsed.users) {
             alert("Invalid backup file format.");

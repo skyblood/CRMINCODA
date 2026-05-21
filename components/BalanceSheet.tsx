@@ -150,7 +150,7 @@ export const BalanceSheet: React.FC<BalanceSheetProps> = ({
   onAddNote,
   onUpdateNote,
   onDeleteNote,
-  companyName = 'BLACKMOON CONSULTING',
+  companyName = 'INCODA CONSULTING',
 }) => {
   const currentCalendarYear = new Date().getFullYear();
 

@@ -161,7 +161,7 @@ Organized by test type:
 
 ### Seed data fails with 400
 **Cause:** Users/leads may already exist in DB  
-**Fix:** Either use unique IDs or drop database: `mongo crm_blackmoon --eval "db.dropDatabase()"`
+**Fix:** Either use unique IDs or drop database: `mongo crm_incoda --eval "db.dropDatabase()"`
 
 ### Modal doesn't open in UI
 **Check:**

@@ -45,7 +45,7 @@ export async function generateProposalContent(lead, veracodeConfig) {
     const cicdLabel = CICD_LABELS[veracodeConfig.cicdPlatform] || veracodeConfig.cicdPlatform || 'No especificada';
     const hasVRM = (veracodeConfig.modules || []).includes('VRM');
 
-    const prompt = `Eres un consultor senior de ciberseguridad de Blackmoon Consulting especializado en Veracode.
+    const prompt = `Eres un consultor senior de ciberseguridad de Incoda Consulting especializado en Veracode.
 Redacta una propuesta técnica profesional en ESPAÑOL para la siguiente oportunidad de negocio.
 
 DATOS DEL CLIENTE:
@@ -72,11 +72,11 @@ ${hasVRM ? 'La sección vrmDetails debe explicar cómo VRM centraliza el riesgo 
 
 Responde ÚNICAMENTE con JSON válido (sin markdown, sin explicaciones fuera del JSON):
 {
-  "executiveSummary": "<resumen ejecutivo 2-3 párrafos: problema de seguridad en AppSec, por qué Veracode+Blackmoon es la solución, ROI esperado>",
+  "executiveSummary": "<resumen ejecutivo 2-3 párrafos: problema de seguridad en AppSec, por qué Veracode+Incoda es la solución, ROI esperado>",
   "solutionOverview": "<visión general: qué módulos y por qué fueron seleccionados para el contexto de ${lead.companyName}>",
   "cicdIntegration": "<pasos de integración con ${cicdLabel}: instalación de plugin/extensión, configuración de pipeline YAML/stages, política de quality gate, variables de entorno requeridas>",
   ${hasVRM ? '"vrmDetails": "<cómo VRM gestiona el riesgo: scoring CVSS/EPSS, dashboards para CISO, SLAs por severidad, integración con ticketing>",\n  ' : ''}"methodology": "<fases: Discovery, Onboarding, Integración ${cicdLabel}, Capacitación, Go-Live — duración y entregables>",
-  "whyBlackmoon": "<por qué Blackmoon: expertise regional, certificaciones Veracode, casos de éxito (sin nombres), soporte post-implementación>",
+  "whyIncoda": "<por qué Incoda: expertise regional, certificaciones Veracode, casos de éxito (sin nombres), soporte post-implementación>",
   "nextSteps": "<3-4 acciones numeradas para avanzar al cierre>"
 }`;
 
@@ -100,7 +100,7 @@ Responde ÚNICAMENTE con JSON válido (sin markdown, sin explicaciones fuera del
             cicdIntegration:  String(parsed.cicdIntegration  || ''),
             vrmDetails:       String(parsed.vrmDetails       || ''),
             methodology:      String(parsed.methodology      || ''),
-            whyBlackmoon:     String(parsed.whyBlackmoon     || ''),
+            whyIncoda:     String(parsed.whyIncoda     || ''),
             nextSteps:        String(parsed.nextSteps        || ''),
             generatedAt:      new Date().toISOString(),
         };
@@ -108,12 +108,12 @@ Responde ÚNICAMENTE con JSON válido (sin markdown, sin explicaciones fuera del
         console.error('[ProposalGenerator] Claude error:', err.message);
         const cicdLabel = CICD_LABELS[veracodeConfig.cicdPlatform] || veracodeConfig.cicdPlatform || 'CI/CD';
         return {
-            executiveSummary: `${lead.companyName} requiere una solución de Application Security Testing para proteger su activo de software. Blackmoon Consulting propone la implementación de la plataforma Veracode con ${veracodeConfig.modules.join(', ')} para ${veracodeConfig.developers} desarrolladores.`,
+            executiveSummary: `${lead.companyName} requiere una solución de Application Security Testing para proteger su activo de software. Incoda Consulting propone la implementación de la plataforma Veracode con ${veracodeConfig.modules.join(', ')} para ${veracodeConfig.developers} desarrolladores.`,
             solutionOverview: `La solución incluye ${veracodeConfig.modules.length} módulo(s) de Veracode diseñados para cubrir el ciclo completo de seguridad en el desarrollo de software (DevSecOps).`,
             cicdIntegration:  `La integración con ${cicdLabel} requiere la instalación del plugin oficial de Veracode y la configuración de las variables de entorno VERACODE_API_ID y VERACODE_API_KEY en el pipeline.`,
             vrmDetails:       veracodeConfig.modules.includes('VRM') ? 'VRM centraliza la gestión de vulnerabilidades con scoring CVSS/EPSS, SLAs configurables por severidad y dashboards para el CISO.' : '',
             methodology:      `Fase 1: Discovery y configuración inicial (1-2 semanas). Fase 2: Onboarding y primera ejecución de scans (1-2 semanas). Fase 3: Integración con ${cicdLabel} (2-3 semanas). Fase 4: Capacitación y Go-Live.`,
-            whyBlackmoon:     'Blackmoon Consulting es el partner autorizado de Veracode con mayor experiencia en Latinoamérica, ofreciendo implementación certificada y soporte técnico continuo en español.',
+            whyIncoda:     'Incoda Consulting es el partner autorizado de Veracode con mayor experiencia en Latinoamérica, ofreciendo implementación certificada y soporte técnico continuo en español.',
             nextSteps:        '1. Revisión de la propuesta con el equipo técnico.\n2. Demo técnica de los módulos seleccionados.\n3. Firma de contrato y kick-off de implementación.',
             generatedAt:      new Date().toISOString(),
         };
@@ -186,11 +186,11 @@ export function assembleProposalHtml(lead, veracodeConfig, content) {
   ${content.cicdIntegration ? section(`Integración con ${cicdLabel}`, content.cicdIntegration, '#1d4ed8') : ''}
   ${content.vrmDetails ? section('Vulnerability Risk Management (VRM)', content.vrmDetails, '#0f172a') : ''}
   ${section('Metodología de Implementación', content.methodology)}
-  ${section('¿Por qué Blackmoon Consulting?', content.whyBlackmoon)}
+  ${section('¿Por qué Incoda Consulting?', content.whyIncoda)}
   ${section('Próximos Pasos', content.nextSteps, '#059669')}
 
   <div class="footer">
-    Preparado por Blackmoon Consulting · Documento confidencial · ${today}
+    Preparado por Incoda Consulting · Documento confidencial · ${today}
   </div>
 </div>
 </body>

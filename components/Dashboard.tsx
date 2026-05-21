@@ -104,7 +104,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ leads, projects, goals, on
       { name: 'Licenses', value: 0, color: '#8b5cf6' }, // Purple
       { name: 'Implementation', value: 0, color: '#3b82f6' }, // Blue
       { name: 'Vendor Support', value: 0, color: '#f97316' }, // Orange
-      { name: 'BlackMoon Support', value: 0, color: '#f59e0b' }, // Amber
+      { name: 'Incoda Support', value: 0, color: '#f59e0b' }, // Amber
       { name: 'Consulting Hours', value: 0, color: '#10b981' } // Emerald
     ];
 
@@ -114,7 +114,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ leads, projects, goals, on
           if (item.category === 'license') data[0].value += item.total;
           else if (item.category === 'implementation') data[1].value += item.total;
           else if (item.category === 'vendor_support') data[2].value += item.total;
-          else if (item.category === 'blackmoon_support') data[3].value += item.total;
+          else if (item.category === 'incoda_support') data[3].value += item.total;
           else if (item.category === 'hours_pack') data[4].value += item.total;
         });
       }
