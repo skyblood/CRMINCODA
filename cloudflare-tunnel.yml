@@ -12,6 +12,6 @@ tunnel: TU_TUNNEL_UUID
 credentials-file: /root/.cloudflared/TU_TUNNEL_UUID.json
 
 ingress:
-  - hostname: crm.tudominio.com
+  - hostname: crm.incoda.biz
     service: http://localhost:3001
   - service: http_status:404
