@@ -7,6 +7,12 @@ services:
       - mongo_data:/data/db
     environment:
       MONGO_INITDB_DATABASE: crm_incoda
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   app:
     build: .
@@ -19,7 +25,8 @@ services:
       MONGO_URI: mongodb://mongo:27017/crm_incoda
       NODE_ENV: production
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
 
 volumes:
   mongo_data:

@@ -326,20 +326,10 @@ const connectDB = async () => {
         await mongoose.connect(MONGO_URI);
         console.log(`✅ Connected to MongoDB: ${MONGO_URI}`);
     } catch (err) {
-        console.log('⚠️  Local MongoDB unavailable. Starting in-memory MongoDB...');
-        try {
-            // Lazy-load mongodb-memory-server only if needed
-            const { MongoMemoryServer } = await import('mongodb-memory-server');
-            const mongod = await MongoMemoryServer.create();
-            const memoryUri = mongod.getUri();
-            await mongoose.connect(memoryUri);
-            console.log(`✅ Connected to in-memory MongoDB: ${memoryUri}`);
-            console.log('   (Data will be lost when the server stops)');
-            console.log('   For persistent data, install MongoDB: https://www.mongodb.com/docs/manual/installation/');
-        } catch (memErr) {
-            console.error('❌ Failed to start MongoDB:', memErr);
-            process.exit(1);
-        }
+        console.error('❌ Cannot connect to MongoDB:', err.message);
+        console.error(`   URI: ${MONGO_URI}`);
+        console.error('   Set MONGO_URI in your .env file to point to a running MongoDB instance.');
+        process.exit(1);
     }
 };
 
