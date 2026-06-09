@@ -180,54 +180,15 @@ const INITIAL_SKUS: SKUItem[] = [
     { id: 'sku_7', code: 'PACK-100H', name: '100h Pack', category: 'hours_pack', basePrice: 15000 }
 ];
 
-// DEMO USERS with Costs
+// DEMO USERS with Costs — passwords come from env vars (set VITE_SEED_PASS_* in .env)
 const INITIAL_USERS: (User & { password?: string })[] = [
-  { id: 'u1', name: 'Fabian Rojas', email: 'fabian@incoda.com.co', role: 'admin', permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: true }, monthlySalary: 5000, hourlyCost: 50, password: 'admin1234' },
-  { id: 'u2', name: 'Sarah Connor', email: 'sarah@future.com', role: 'consultant', permissions: { dashboard: false, crm: false, projects: false, portal: true, admin: false }, monthlySalary: 0, hourlyCost: 90, password: 'sarah1234' },
-  { id: 'u3', name: 'Kyle Reese', email: 'kyle@tech.com', role: 'sales', permissions: { dashboard: true, crm: true, projects: false, portal: false, admin: false }, monthlySalary: 3000, hourlyCost: 0, password: 'kyle1234' }
+  { id: 'u1', name: 'Fabian Rojas', email: 'fabian@incoda.com.co', role: 'admin', permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: true }, monthlySalary: 5000, hourlyCost: 50, password: import.meta.env.VITE_SEED_PASS_ADMIN },
+  { id: 'u2', name: 'Sarah Connor', email: 'sarah@future.com', role: 'consultant', permissions: { dashboard: false, crm: false, projects: false, portal: true, admin: false }, monthlySalary: 0, hourlyCost: 90, password: import.meta.env.VITE_SEED_PASS_CONSULTANT },
+  { id: 'u3', name: 'Kyle Reese', email: 'kyle@tech.com', role: 'sales', permissions: { dashboard: true, crm: true, projects: false, portal: false, admin: false }, monthlySalary: 3000, hourlyCost: 0, password: import.meta.env.VITE_SEED_PASS_SALES }
 ];
 
-// DEMO LEADS (One Won, One Loss, One Negotiation)
+// DEMO LEADS
 const INITIAL_LEADS: Lead[] = [
-   {
-       id: 'lead_demo_1',
-       companyName: 'Cyberdyne Systems',
-       contactName: 'Miles Dyson',
-       email: 'miles@cyberdyne.com',
-       phone: '555-0700',
-       city: 'San Francisco',
-       country: 'USA',
-       role: 'CTO',
-       description: 'Skynet Core Implementation - High Value',
-       value: 120000,
-       closedValue: 120000,
-       partnerName: 'Microsoft',
-       manufacturer: 'Microsoft',
-       items: [],
-       stage: 'closed-won',
-       probability: 100,
-       expectedCloseDate: `${CURRENT_YEAR}-05-15`,
-       interactions: [], documents: [], preSalesTimeLogs: [], tasks: []
-   },
-   {
-       id: 'lead_demo_2',
-       companyName: 'Stark Industries',
-       contactName: 'Tony Stark',
-       email: 'tony@stark.com',
-       phone: '555-9999',
-       city: 'New York',
-       country: 'USA',
-       role: 'CEO',
-       description: 'Iron Man Suit Security Audit',
-       value: 85000,
-       partnerName: 'AWS',
-       manufacturer: 'AWS',
-       items: [],
-       stage: 'negotiation',
-       probability: 80,
-       expectedCloseDate: `${CURRENT_YEAR}-${String(CURRENT_MONTH + 2).padStart(2,'0')}-28`,
-       interactions: [], documents: [], preSalesTimeLogs: [], tasks: []
-   },
    {
        id: 'lead_demo_3',
        companyName: 'Wayne Enterprises',
@@ -250,36 +211,11 @@ const INITIAL_LEADS: Lead[] = [
    },
 ];
 
-const INITIAL_PROJECTS: Project[] = [
-    {
-        id: 'proj_demo_1',
-        leadId: 'lead_demo_1',
-        name: 'IMPLEMENTATION: Cyberdyne Systems',
-        clientName: 'Cyberdyne Systems',
-        type: 'implementation',
-        startDate: new Date(`${CURRENT_YEAR}-06-01`).toISOString(),
-        status: 'active',
-        totalBudgetHours: 63,
-        team: ['Sarah Connor'],
-        tasks: [
-            { id: 'task_1', title: 'Phase 1: Kick Off', assignee: 'Sarah Connor', status: 'done', estimatedHours: 4, loggedHours: 4, subtasks: [] },
-            { id: 'task_2', title: 'Phase 2: Initial Config', assignee: 'Sarah Connor', status: 'in-progress', estimatedHours: 16, loggedHours: 8, subtasks: [] },
-            { id: 'task_3', title: 'Phase 3: SAST', assignee: 'Sarah Connor', status: 'todo', estimatedHours: 12, loggedHours: 0, subtasks: [] },
-        ],
-        timeLogs: [
-            { id: 'log_1', taskId: 'task_1', consultantName: 'Sarah Connor', consultantId: 'u2', hours: 4, date: `${CURRENT_YEAR}-06-05`, description: 'Kickoff session completed', status: 'approved', approvedRate: 90, approvedCost: 360 },
-            { id: 'log_2', taskId: 'task_2', consultantName: 'Sarah Connor', consultantId: 'u2', hours: 8, date: `${CURRENT_YEAR}-06-15`, description: 'Initial config in progress', status: 'pending' },
-        ],
-        payments: [{ id: 'pmt_1', amount: 60000, date: `${CURRENT_YEAR}-06-01`, reference: 'INV-001 Initial Payment' }],
-        factoryCommissionRate: 10,
-    }
-];
+const INITIAL_PROJECTS: Project[] = [];
 
 const INITIAL_TRANSACTIONS: Transaction[] = [
-    { id: 'tx1', title: 'Cyberdyne Implementation Payment', amount: 60000, date: `${CURRENT_YEAR}-06-01`, type: 'income', category: 'other', projectId: 'proj_demo_1', description: 'Initial payment for Skynet project' },
     { id: 'tx2', title: 'AWS Cloud Hosting', amount: 1200, date: `${CURRENT_YEAR}-06-15`, type: 'expense', category: 'software', description: 'Monthly cloud hosting' },
     { id: 'tx3', title: 'Office Supplies', amount: 350, date: `${CURRENT_YEAR}-06-20`, type: 'expense', category: 'office', description: 'Printer ink and paper' },
-    { id: 'tx4', title: 'Stark Industries Consulting', amount: 15000, date: `${CURRENT_YEAR}-07-01`, type: 'income', category: 'other', leadId: 'lead_demo_2', description: 'Pre-sales consulting fee' },
     { id: 'tx5', title: 'Client Dinner', amount: 450, date: `${CURRENT_YEAR}-10-15`, type: 'expense', category: 'marketing', leadId: 'lead_demo_3', description: 'Executive dinner with Lucius Fox' },
 ];
 

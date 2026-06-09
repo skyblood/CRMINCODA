@@ -386,6 +386,22 @@ export const initializeLocalStore = (initialData: any) => {
         localStorage.setItem(STORAGE_PREFIX + INIT_FLAG, 'true');
     }
 
+    // Migration: remove retired demo records
+    const REMOVED_DEMO_IDS = new Set(['lead_demo_1', 'lead_demo_2', 'proj_demo_1', 'tx1', 'tx4']);
+    const MIGRATED_KEY = STORAGE_PREFIX + 'MIGRATED_DEMO_CLEANUP_V1';
+    if (!localStorage.getItem(MIGRATED_KEY)) {
+        (['leads', 'projects', 'transactions'] as const).forEach(col => {
+            if (Array.isArray(localStore[col])) {
+                const cleaned = (localStore[col] as any[]).filter((item: any) => !REMOVED_DEMO_IDS.has(item.id));
+                if (cleaned.length !== (localStore[col] as any[]).length) {
+                    localStore[col] = cleaned;
+                    saveToStorage(col, cleaned);
+                }
+            }
+        });
+        localStorage.setItem(MIGRATED_KEY, 'true');
+    }
+
     Object.keys(localStore).forEach(key => notifyListeners(key));
 };
 
