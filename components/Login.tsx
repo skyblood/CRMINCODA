@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { Lock, Mail, ArrowRight, AlertCircle, Loader2, Database, CheckCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { loginUser } from '../services/apiService';
 
 interface LoginProps {
@@ -35,24 +35,6 @@ export const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
     }
   };
 
-  const autoLoginDemo = async () => {
-      setLoading(true);
-      const admin = users.find(u => u.role === 'admin') || users[0];
-      if (admin) {
-          const { user, error: loginError } = await loginUser(admin.email, 'admin1234');
-          if (user) {
-              onLogin(user as User);
-          } else {
-              // Fallback: login directo si no tiene contraseña aún
-              onLogin(admin);
-          }
-          setLoading(false);
-      } else {
-          setError("Admin user not found. Please reset the database.");
-          setLoading(false);
-      }
-  };
-
   const LOGO_URL = "/incoda-logo.svg";
 
   return (
@@ -76,22 +58,6 @@ export const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        {/* MongoDB Mode Indicator */}
-        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-            <div className="flex items-start gap-3">
-                <div className="bg-green-50 p-2 rounded-lg text-green-600">
-                    <Database size={20} />
-                </div>
-                <div>
-                    <h3 className="text-sm font-bold text-gray-900">MongoDB Authentication</h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                        Credentials are validated against the database.
-                        Data is stored persistently in MongoDB.
-                    </p>
-                </div>
-            </div>
-        </div>
-
         <div className="bg-white py-8 px-4 shadow-xl sm:rounded-xl sm:px-10 border border-gray-100">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
@@ -159,26 +125,12 @@ export const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
                 {loading ? <Loader2 className="animate-spin" size={16} /> : <span className="flex items-center gap-2">Sign in securely <ArrowRight size={16} /></span>}
               </button>
               
-              <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-gray-200"></div>
-                  <span className="flex-shrink-0 mx-4 text-gray-400 text-xs">Quick Access</span>
-                  <div className="flex-grow border-t border-gray-200"></div>
-              </div>
-
-              <button
-                type="button"
-                onClick={autoLoginDemo}
-                disabled={loading}
-                className="w-full flex justify-center py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-              >
-                 Enter as Admin (Local Demo)
-              </button>
             </div>
           </form>
         </div>
         
         <p className="mt-6 text-center text-xs text-gray-400">
-           &copy; 2024 Incoda CRM. Local Version.
+           &copy; {new Date().getFullYear()} Incoda CRM.
         </p>
       </div>
     </div>
