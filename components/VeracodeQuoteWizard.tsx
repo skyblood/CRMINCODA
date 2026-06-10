@@ -554,7 +554,17 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
                       </button>
                     ) : (
                       <a
-                        href={(() => { try { const sanitized = sanitizeHttpsUrl(driveUrl); return sanitized.startsWith('https://') ? sanitized : '#'; } catch { return '#'; } })()}
+                        href={(() => {
+                          try {
+                            const sanitized = sanitizeHttpsUrl(driveUrl);
+                            if (!sanitized.startsWith('https://drive.google.com/')) {
+                              return '#';
+                            }
+                            return sanitized;
+                          } catch {
+                            return '#';
+                          }
+                        })()}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 px-4 py-2 text-sm border border-green-200 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"
