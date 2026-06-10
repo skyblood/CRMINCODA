@@ -155,6 +155,9 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
   const [generating, setGenerating] = useState(false);
   const [proposalId, setProposalId] = useState<string | null>(null);
   const [proposalHtml, setProposalHtml] = useState<string | null>(null);
+  // Sanitized once; used in both dangerouslySetInnerHTML and srcDoc so Veracode can
+  // trace that untrusted HTML always passes through DOMPurify before any DOM sink.
+  const sanitizedProposalHtml = useMemo(() => DOMPurify.sanitize(proposalHtml ?? ''), [proposalHtml]);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [driveUrl, setDriveUrl] = useState<string | null>(null);
   const [uploadingDrive, setUploadingDrive] = useState(false);
@@ -551,7 +554,7 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
                       </button>
                     ) : (
                       <a
-                        href={(() => { try { return sanitizeHttpsUrl(driveUrl); } catch { return '#'; } })()}
+                        href={(() => { try { const sanitized = sanitizeHttpsUrl(driveUrl); return sanitized.startsWith('https://') ? sanitized : '#'; } catch { return '#'; } })()}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 px-4 py-2 text-sm border border-green-200 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"
@@ -575,10 +578,10 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
                       <span className="text-gray-400">Scroll para ver completa</span>
                     </div>
                     {/* Hidden div keeps ref for html2pdf PDF export — content sanitized with DOMPurify */}
-                    <div ref={proposalRef} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(proposalHtml ?? '') }} className="sr-only" aria-hidden="true" />
+                    <div ref={proposalRef} dangerouslySetInnerHTML={{ __html: sanitizedProposalHtml }} className="sr-only" aria-hidden="true" />
                     <div className="max-h-64 overflow-y-auto">
                       <iframe
-                        srcDoc={DOMPurify.sanitize(proposalHtml ?? '')}
+                        srcDoc={sanitizedProposalHtml}
                         className="w-full border-0"
                         style={{ minHeight: '240px' }}
                         title="Proposal preview"

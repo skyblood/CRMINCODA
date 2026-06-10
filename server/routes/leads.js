@@ -14,6 +14,17 @@ import { evaluateRules } from '../automationService.js';
 
 const router = Router();
 
+// Strip MongoDB operator keys ($ prefix) from user input to prevent NoSQL injection.
+function sanitizeMongoInput(obj) {
+    if (Array.isArray(obj)) return obj.map(sanitizeMongoInput);
+    if (typeof obj !== 'object' || obj === null) return obj;
+    return Object.fromEntries(
+        Object.entries(obj)
+            .filter(([k]) => !k.startsWith('$'))
+            .map(([k, v]) => [k, sanitizeMongoInput(v)])
+    );
+}
+
 // GET ALL — excludes soft-deleted leads
 router.get('/', async (_req, res) => {
     try {
@@ -40,7 +51,7 @@ router.get('/:id', async (req, res) => {
 // CREATE
 router.post('/', async (req, res) => {
     try {
-        const body = req.body;
+        const body = sanitizeMongoInput(req.body);
         // Initialize stageHistory if not provided
         if (!body.stageHistory || body.stageHistory.length === 0) {
             body.stageHistory = [{
@@ -64,7 +75,7 @@ router.post('/', async (req, res) => {
 // UPDATE — intercepts stage → 'closed-won' to fire email notification
 router.put('/:id', async (req, res) => {
     try {
-        const { id: _bodyId, ...updateData } = req.body;
+        const { id: _bodyId, ...updateData } = sanitizeMongoInput(req.body);
 
         // Fetch existing doc to check stage change and update stageHistory
         const existing = await Lead.findOne({ id: req.params.id }).lean();
@@ -178,7 +189,7 @@ router.put('/:id', async (req, res) => {
 // BULK PATCH — change_stage | assign_owner | delete
 router.patch('/bulk', async (req, res) => {
     try {
-        const { ids, action, payload } = req.body;
+        const { ids, action, payload } = sanitizeMongoInput(req.body);
         if (!Array.isArray(ids) || ids.length === 0)
             return res.status(400).json({ error: 'ids must be a non-empty array' });
 

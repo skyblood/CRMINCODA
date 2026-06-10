@@ -308,27 +308,6 @@ const Sidebar: React.FC<{ restoreInputRef: React.RefObject<HTMLInputElement> }> 
                     <div className="w-8 h-0.5 mt-1 rounded-full" style={{ background: 'linear-gradient(90deg, #410074, #B9B7C9)' }} />
                 </div>
             </div>
-            <div className="px-6 pb-3">
-                {dbConnected ? (
-                    <div className="flex items-center gap-2 text-[10px] px-3 py-1.5 rounded" style={{ background: 'rgba(65,0,116,0.3)', color: '#E5E4F0', border: '1px solid rgba(185,183,201,0.2)' }}>
-                        <HardDrive size={10} className="animate-pulse" style={{ color: '#B9B7C9' }} />
-                        <span>MongoDB Connected</span>
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2 text-[10px] bg-yellow-900/50 text-yellow-200 px-3 py-1.5 rounded border border-yellow-800">
-                            <WifiOff size={10} className="text-yellow-400" />
-                            <span>Offline — Local Cache</span>
-                        </div>
-                        {pendingWrites > 0 && (
-                            <div className="flex items-center gap-2 text-[10px] bg-red-900/50 text-red-200 px-3 py-1.5 rounded border border-red-800">
-                                <Loader2 size={10} className="animate-spin text-red-400" />
-                                <span>{pendingWrites} pending sync</span>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
             <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto custom-scrollbar">
                 {currentUser.permissions?.dashboard && <NavLink to="/" icon={LayoutDashboard} label="Dashboard" />}
                 {currentUser.permissions?.crm && (

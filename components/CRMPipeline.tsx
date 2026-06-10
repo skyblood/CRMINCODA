@@ -3067,7 +3067,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                 <>
                     {/* INFO Tab Content */}
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm grid grid-cols-2 gap-4">
-                        <div className="flex items-center gap-3 text-sm text-gray-700"><Mail className="text-gray-400" size={16} /> <a href={(() => { try { return `mailto:${sanitizeEmail(activeLead.email)}`; } catch { return '#'; } })()} className="hover:text-blue-600 hover:underline">{activeLead.email}</a></div>
+                        <div className="flex items-center gap-3 text-sm text-gray-700"><Mail className="text-gray-400" size={16} /> <a href={(() => { try { const sanitized = sanitizeEmail(activeLead.email); return sanitized ? `mailto:${encodeURIComponent(sanitized)}` : '#'; } catch { return '#'; } })()} className="hover:text-blue-600 hover:underline">{activeLead.email}</a></div>
                         <div className="flex items-center gap-3 text-sm text-gray-700"><Phone className="text-gray-400" size={16} /> <span>{activeLead.phone}</span></div>
                         <div className="flex items-center gap-3 text-sm text-gray-700"><MapPin className="text-gray-400" size={16} /> <span>{activeLead.city}, {activeLead.country}</span></div>
                         <div className="flex items-center gap-3 text-sm text-gray-700"><Briefcase className="text-gray-400" size={16} /> <span>{activeLead.role}</span></div>

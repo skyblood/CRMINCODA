@@ -37,5 +37,6 @@ const API_PATH_RE = /^\/api[a-zA-Z0-9\-._~:/?#@!$&'()*+,;=%]{0,4096}$/;
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const s = String(path ?? '');
   if (!API_PATH_RE.test(s)) throw new Error('apiFetch: path blocked');
-  return fetch(s, { credentials: 'include', ...init });
+  // Prepend explicit origin so the resolved URL is structurally same-origin (prevents SSRF).
+  return fetch(window.location.origin + s, { credentials: 'include', ...init });
 }
