@@ -7,3 +7,6 @@ server/cert-key.pem
 service-account.json
 *.pem
 
+backups/
+ANALISIS-GSTACK.md
+reportes/
