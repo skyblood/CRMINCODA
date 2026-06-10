@@ -43,6 +43,7 @@
     "@hookform/resolvers": "~3.9.1",
     "@types/dompurify": "^3.2.0",
     "bcryptjs": "^3.0.3",
+    "connect-mongo": "^6.0.0",
     "cors": "^2.8.5",
     "dompurify": "^3.4.8",
     "dotenv": "^17.3.1",

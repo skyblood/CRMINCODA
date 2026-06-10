@@ -22,6 +22,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
+import MongoStore from 'connect-mongo';
 import { sanitizeBody, sanitizeQuery, sanitizeParams } from './middleware/sanitize.js';
 import cron from 'node-cron';
 // Lazy-loaded if system MongoDB fails (see connectDB function)
@@ -189,15 +190,22 @@ if (IS_PROD && !process.env.SESSION_SECRET) {
     process.exit(1);
 }
 
+const SESSION_MAX_AGE = 8 * 60 * 60 * 1000; // 8 horas
 app.use(session({
     secret: process.env.SESSION_SECRET || require('crypto').randomBytes(32).toString('hex'),
     resave: false,
     saveUninitialized: false,
+    store: MongoStore.create({
+        mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/crm_incoda',
+        collectionName: 'sessions',
+        ttl: SESSION_MAX_AGE / 1000,   // en segundos
+        autoRemove: 'native',
+    }),
     cookie: {
         httpOnly: true,
         secure: IS_PROD,   // Cloudflare Tunnel termina TLS en el edge; activar en prod siempre
         sameSite: 'lax',
-        maxAge: 8 * 60 * 60 * 1000   // 8 horas
+        maxAge: SESSION_MAX_AGE
     }
 }));
 
