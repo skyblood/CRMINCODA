@@ -28,7 +28,7 @@ import Lead from '../models/Lead.js';
 import Transaction from '../models/Transaction.js';
 import Commission from '../models/Commission.js';
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
 
 async function migrate() {
   await mongoose.connect(MONGO_URI);

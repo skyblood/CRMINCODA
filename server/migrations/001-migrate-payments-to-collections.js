@@ -28,7 +28,7 @@ import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import Settings from '../models/Settings.js';
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
 
 async function getNextNumber() {
   const settings = await Settings.findOneAndUpdate(
