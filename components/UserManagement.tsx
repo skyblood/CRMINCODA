@@ -103,7 +103,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
         email: formData.email,
         role: formData.role,
         permissions: formData.permissions,
-        password: formData.password || 'crm1234'
+        password: formData.password
       };
       onAddUser(newUser);
     }

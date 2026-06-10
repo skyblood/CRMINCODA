@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FileText, Plus, Search, Filter, Eye, Send, Ban, DollarSign, AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react';
 import type { Invoice, InvoiceStatus } from '../types';
+import { apiFetch, sanitizeId } from '../services/apiFetch';
 
 const STATUS_CONFIG: Record<InvoiceStatus, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   draft:          { label: 'Borrador',  color: '#6B7280', bg: '#F3F4F6', icon: FileText },
@@ -37,7 +38,7 @@ export function InvoiceManager() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.set('status', statusFilter);
-      const res = await fetch(`/api/invoices?${params}`);
+      const res = await apiFetch(`/api/invoices?${params}`);
       if (res.ok) {
         const data = await res.json();
         setInvoices(data);
@@ -63,7 +64,7 @@ export function InvoiceManager() {
 
   const handleIssue = async (id: string) => {
     try {
-      const res = await fetch(`/api/invoices/${id}/issue`, { method: 'POST' });
+      const res = await apiFetch(`/api/invoices/${sanitizeId(id)}/issue`, { method: 'POST' });
       if (res.ok) fetchInvoices();
     } catch (err) {
       console.error('Failed to issue invoice:', err);
@@ -74,7 +75,7 @@ export function InvoiceManager() {
     const reason = prompt('Razón de anulación:');
     if (!reason) return;
     try {
-      const res = await fetch(`/api/invoices/${id}/void`, {
+      const res = await apiFetch(`/api/invoices/${sanitizeId(id)}/void`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
@@ -92,7 +93,7 @@ export function InvoiceManager() {
   const handleDelete = async (id: string) => {
     if (!confirm('¿Eliminar este borrador?')) return;
     try {
-      const res = await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/invoices/${sanitizeId(id)}`, { method: 'DELETE' });
       if (res.ok) fetchInvoices();
     } catch (err) {
       console.error('Failed to delete invoice:', err);
@@ -275,7 +276,7 @@ function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCre
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/invoices', {
+      const res = await apiFetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -399,7 +400,7 @@ function InvoiceDetailPanel({ invoice, onClose, onRefresh }: { invoice: Invoice;
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/invoices/${invoice._id}/payments`)
+    apiFetch(`/api/invoices/${sanitizeId(invoice._id)}/payments`)
       .then(r => r.json())
       .then(setPayments)
       .catch(() => {});
@@ -408,7 +409,7 @@ function InvoiceDetailPanel({ invoice, onClose, onRefresh }: { invoice: Invoice;
   const handleRegisterPayment = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/invoices/${invoice._id}/payments`, {
+      const res = await apiFetch(`/api/invoices/${sanitizeId(invoice._id)}/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -425,7 +426,7 @@ function InvoiceDetailPanel({ invoice, onClose, onRefresh }: { invoice: Invoice;
         setPaymentData({ amount: 0, method: 'wire_transfer', reference: '', currency: invoice.currency, notes: '' });
         onRefresh();
         // Refresh payments
-        const pRes = await fetch(`/api/invoices/${invoice._id}/payments`);
+        const pRes = await apiFetch(`/api/invoices/${sanitizeId(invoice._id)}/payments`);
         if (pRes.ok) setPayments(await pRes.json());
       } else {
         const err = await res.json();

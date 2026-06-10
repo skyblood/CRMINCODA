@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { Lead, LineItem } from '../types';
 import type { VeracodeConfig } from './VeracodeQuoteWizard';
+import { apiFetch, sanitizeId } from '../services/apiFetch';
 import { Save, Edit3, Eye, ChevronDown, Check, Trash2, FileText } from 'lucide-react';
 
 interface ProposalContent {
@@ -83,19 +85,19 @@ export function ProposalPrint({ lead, onClose }: Props) {
     const init = async () => {
       // Fetch saved proposals (no htmlContent)
       try {
-        const r = await fetch(`/api/proposals?leadId=${lead.id}`, { credentials: 'include' });
+        const r = await apiFetch(`/api/proposals?leadId=${sanitizeId(lead.id)}`, { credentials: 'include' });
         if (r.ok) setSavedProposals(await r.json());
       } catch { /* ignore */ }
       setLoadingList(false);
 
       // Fetch default template
       try {
-        const res = await fetch('/api/proposal-templates/meta/default', { credentials: 'include' });
+        const res = await apiFetch('/api/proposal-templates/meta/default', { credentials: 'include' });
         if (res.ok) {
           const meta = await res.json();
           if (meta?.id) {
             setTemplateId(meta.id);
-            const applyRes = await fetch(`/api/proposal-templates/${meta.id}/apply`, {
+            const applyRes = await apiFetch(`/api/proposal-templates/${sanitizeId(meta.id)}/apply`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
@@ -128,7 +130,7 @@ export function ProposalPrint({ lead, onClose }: Props) {
   const handleGenerateAI = async () => {
     setGenerating(true);
     try {
-      const res = await fetch('/api/proposals/generate', {
+      const res = await apiFetch('/api/proposals/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -140,7 +142,7 @@ export function ProposalPrint({ lead, onClose }: Props) {
 
       // Re-apply template with fresh AI content
       if (templateId) {
-        const applyRes = await fetch(`/api/proposal-templates/${templateId}/apply`, {
+        const applyRes = await apiFetch(`/api/proposal-templates/${sanitizeId(templateId)}/apply`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -159,13 +161,14 @@ export function ProposalPrint({ lead, onClose }: Props) {
   const handlePrint = () => {
     const content = editMode ? livePreview : templateHtml;
     if (content) {
-      const win = window.open('', '_blank');
-      if (!win) return;
-      win.document.write(content);
-      win.document.close();
+      const safe = DOMPurify.sanitize(content);
+      const blob = new Blob([safe], { type: 'text/html' });
+      const blobUrl = URL.createObjectURL(blob);
+      const win = window.open(blobUrl, '_blank');
+      if (!win) { URL.revokeObjectURL(blobUrl); return; }
+      win.addEventListener('afterprint', () => { URL.revokeObjectURL(blobUrl); win.close(); });
       win.focus();
       win.print();
-      win.close();
       return;
     }
     if (!ref.current) return;
@@ -190,7 +193,7 @@ export function ProposalPrint({ lead, onClose }: Props) {
       const total = lead.items.reduce((s, i) => s + i.total, 0);
       if (activeProposalId) {
         // Update existing
-        const res = await fetch(`/api/proposals/${activeProposalId}`, {
+        const res = await apiFetch(`/api/proposals/${sanitizeId(activeProposalId)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -200,7 +203,7 @@ export function ProposalPrint({ lead, onClose }: Props) {
           setSavedProposals(prev => prev.map(p => p.id === activeProposalId ? { ...p, name } : p));
         }
       } else {
-        const res = await fetch('/api/proposals', {
+        const res = await apiFetch('/api/proposals', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -218,7 +221,7 @@ export function ProposalPrint({ lead, onClose }: Props) {
   };
 
   const loadProposal = async (p: SavedProposal) => {
-    const res = await fetch(`/api/proposals/${p.id}`, { credentials: 'include' });
+    const res = await apiFetch(`/api/proposals/${sanitizeId(p.id)}`, { credentials: 'include' });
     if (!res.ok) return;
     const full = await res.json();
     setTemplateHtml(full.htmlContent);
@@ -230,13 +233,13 @@ export function ProposalPrint({ lead, onClose }: Props) {
   const deleteProposal = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm('¿Eliminar esta propuesta guardada?')) return;
-    await fetch(`/api/proposals/${id}`, { method: 'DELETE', credentials: 'include' });
+    await apiFetch(`/api/proposals/${sanitizeId(id)}`, { method: 'DELETE', credentials: 'include' });
     setSavedProposals(prev => prev.filter(p => p.id !== id));
     if (activeProposalId === id) setActiveProposalId(null);
   };
 
   const updateStatus = async (id: string, status: SavedProposal['status']) => {
-    const res = await fetch(`/api/proposals/${id}`, {
+    const res = await apiFetch(`/api/proposals/${sanitizeId(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -322,7 +325,7 @@ export function ProposalPrint({ lead, onClose }: Props) {
           <div className="w-1/2 h-full overflow-auto bg-white">
             {livePreview ? (
               <iframe
-                srcDoc={livePreview}
+                srcDoc={DOMPurify.sanitize(livePreview ?? '')}
                 className="w-full h-full border-0"
                 title="Live preview"
                 sandbox="allow-same-origin"
@@ -489,7 +492,7 @@ export function ProposalPrint({ lead, onClose }: Props) {
           <div className="flex items-center justify-center h-96 text-gray-400 text-sm">Cargando template...</div>
         ) : currentHtml ? (
           <iframe
-            srcDoc={currentHtml}
+            srcDoc={DOMPurify.sanitize(currentHtml ?? '')}
             className="w-full border-0 rounded-b-2xl"
             style={{ minHeight: '80vh' }}
             title="Proposal template preview"

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Mail, Eye, Save, X, Tag } from 'lucide-react';
+import { apiFetch, sanitizeId } from '../services/apiFetch';
 
 interface EmailTemplate {
   id: string;
@@ -42,7 +43,7 @@ export const EmailTemplateManager: React.FC = () => {
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/email-templates', { credentials: 'include' });
+      const res = await apiFetch('/api/email-templates', { credentials: 'include' });
       const data = await res.json();
       setTemplates(Array.isArray(data) ? data : []);
     } finally {
@@ -70,7 +71,7 @@ export const EmailTemplateManager: React.FC = () => {
     setSaving(true);
     try {
       if (isNew) {
-        const res = await fetch('/api/email-templates', {
+        const res = await apiFetch('/api/email-templates', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
@@ -80,7 +81,7 @@ export const EmailTemplateManager: React.FC = () => {
         setSelected(created);
         setIsNew(false);
       } else if (selected) {
-        const res = await fetch(`/api/email-templates/${selected.id}`, {
+        const res = await apiFetch(`/api/email-templates/${sanitizeId(selected.id)}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
@@ -96,13 +97,13 @@ export const EmailTemplateManager: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this template?')) return;
-    await fetch(`/api/email-templates/${id}`, { method: 'DELETE', credentials: 'include' });
+    await apiFetch(`/api/email-templates/${sanitizeId(id)}`, { method: 'DELETE', credentials: 'include' });
     setTemplates(prev => prev.filter(t => t.id !== id));
     if (selected?.id === id) { setSelected(null); setIsNew(false); }
   };
 
   const handlePreview = async () => {
-    const res = await fetch('/api/email-templates/preview', {
+    const res = await apiFetch('/api/email-templates/preview', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subject: form.subject, body: form.body, lead: SAMPLE_LEAD }),

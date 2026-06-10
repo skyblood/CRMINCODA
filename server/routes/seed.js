@@ -19,15 +19,23 @@ import EmailTemplate from '../models/EmailTemplate.js';
 import Pipeline from '../models/Pipeline.js';
 import ProposalTemplate from '../models/ProposalTemplate.js';
 
-// Prepare users by hashing their password if provided in plain text
+// Prepare users by hashing their password if provided in plain text.
+// If no password is sent (frontend no longer includes them), fall back to
+// server-side SEED_PASS_* env vars keyed by role.
+const SEED_PASSWORDS_BY_ROLE = {
+    admin:      process.env.SEED_PASS_ADMIN,
+    consultant: process.env.SEED_PASS_CONSULTANT,
+    sales:      process.env.SEED_PASS_SALES,
+};
+
 const prepareUsers = async (users) => {
     return Promise.all((users || []).map(async (u) => {
-        if (u.password && !u.passwordHash) {
-            const passwordHash = await bcrypt.hash(u.password, 10);
-            const { password, ...rest } = u;
-            return { ...rest, passwordHash };
+        const plaintext = u.password || SEED_PASSWORDS_BY_ROLE[u.role];
+        const { password, ...rest } = u;
+        if (plaintext && !rest.passwordHash) {
+            rest.passwordHash = await bcrypt.hash(plaintext, 10);
         }
-        return u;
+        return rest;
     }));
 };
 

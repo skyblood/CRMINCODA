@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileText, Upload, Star, Trash2, Eye, Plus, X, Check, Info } from 'lucide-react';
+import DOMPurify from 'dompurify';
+import { apiFetch, sanitizeId } from '../services/apiFetch';
 
 interface Template {
   id: string;
@@ -33,7 +35,7 @@ export function ProposalTemplateManager() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/proposal-templates', { credentials: 'include' });
+      const res = await apiFetch('/api/proposal-templates', { credentials: 'include' });
       if (res.ok) setTemplates(await res.json());
     } finally { setLoading(false); }
   };
@@ -53,7 +55,7 @@ export function ProposalTemplateManager() {
     if (!newName.trim() || !newHtml.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch('/api/proposal-templates', {
+      const res = await apiFetch('/api/proposal-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -68,7 +70,7 @@ export function ProposalTemplateManager() {
   };
 
   const setDefault = async (id: string) => {
-    await fetch(`/api/proposal-templates/${id}`, {
+    await apiFetch(`/api/proposal-templates/${sanitizeId(id)}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       credentials: 'include', body: JSON.stringify({ isDefault: true }),
     });
@@ -77,13 +79,13 @@ export function ProposalTemplateManager() {
 
   const deleteTemplate = async (id: string) => {
     if (!window.confirm('¿Eliminar este template?')) return;
-    await fetch(`/api/proposal-templates/${id}`, { method: 'DELETE', credentials: 'include' });
+    await apiFetch(`/api/proposal-templates/${sanitizeId(id)}`, { method: 'DELETE', credentials: 'include' });
     load();
   };
 
   const previewTemplate = async (id: string) => {
     // Preview raw HTML (no lead data)
-    const res = await fetch(`/api/proposal-templates/${id}`, { credentials: 'include' });
+    const res = await apiFetch(`/api/proposal-templates/${sanitizeId(id)}`, { credentials: 'include' });
     if (res.ok) {
       const t = await res.json();
       setPreviewHtml(t.htmlContent);
@@ -256,7 +258,7 @@ export function ProposalTemplateManager() {
             </div>
             <div className="flex-1 overflow-auto p-1">
               <iframe
-                srcDoc={previewHtml}
+                srcDoc={DOMPurify.sanitize(previewHtml ?? '')}
                 className="w-full h-full rounded-lg border-0"
                 style={{ minHeight: '600px' }}
                 title="Template preview"

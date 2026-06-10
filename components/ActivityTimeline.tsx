@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, Interaction } from '../types';
 import { Clock, MessageSquare, Mail, Phone, Users, CheckSquare, GitBranch, Plus, Trash2, Sparkles } from 'lucide-react';
+import { apiFetch, sanitizeId } from '../services/apiFetch';
 
 interface LeadContext {
   companyName: string;
@@ -52,7 +53,7 @@ export function ActivityTimeline({ entityId, entityType, interactions = [], curr
 
   const fetchActivities = useCallback(async () => {
     try {
-      const res = await fetch(`/api/activities?entityId=${entityId}&entityType=${entityType}`, { credentials: 'include' });
+      const res = await apiFetch(`/api/activities?entityId=${sanitizeId(entityId)}&entityType=${entityType}`, { credentials: 'include' });
       if (res.ok) setActivities(await res.json());
     } finally {
       setLoading(false);
@@ -83,7 +84,7 @@ export function ActivityTimeline({ entityId, entityType, interactions = [], curr
         entityId,
         entityType,
       };
-      const res = await fetch('/api/activities', {
+      const res = await apiFetch('/api/activities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -104,7 +105,7 @@ export function ActivityTimeline({ entityId, entityType, interactions = [], curr
     setDraftingEmail(true);
     try {
       const recentActivities = merged.slice(0, 5).map(a => ({ type: a.type, note: a.note }));
-      const res = await fetch('/api/ai/email-draft', {
+      const res = await apiFetch('/api/ai/email-draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -122,7 +123,7 @@ export function ActivityTimeline({ entityId, entityType, interactions = [], curr
   };
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/activities/${id}`, { method: 'DELETE', credentials: 'include' });
+    await apiFetch(`/api/activities/${sanitizeId(id)}`, { method: 'DELETE', credentials: 'include' });
     setActivities(prev => prev.filter(a => a.id !== id));
   };
 

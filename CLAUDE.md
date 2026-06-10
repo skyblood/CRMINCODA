@@ -91,8 +91,9 @@ Flat file layout — no `src/` subdirectory. Key files live at the repo root:
 App.tsx                  # Root component: state, routing, sidebar nav
 components/              # One file per module (lazy-loaded via React.lazy)
 services/
-  firebaseService.ts     # Data layer (despite the name, this talks to MongoDB)
-  geminiService.ts       # AI integration
+  apiService.ts          # Data layer — dual-mode (MongoDB online / localStorage offline)
+  firebaseService.ts     # Legacy alias, imports from apiService
+  aiService.ts           # AI integration (Anthropic Claude, server-side)
 server/
   index.js               # Express entry point, registers all routes
   routes/crud.js         # createCrudRouter(Model) — generic CRUD factory
@@ -104,14 +105,14 @@ index.html               # Brand CSS overrides live here in a <style> block
 ### Frontend (React 18 + TypeScript + Vite 5)
 
 - **Routing**: `HashRouter` from react-router-dom v6; all routes declared in `App.tsx`.
-- **State**: Lifted entirely into `App.tsx` via `useState`; passed down as props — no Redux/Zustand.
+- **State**: Zustand stores (`useDataStore`, `useAuthStore`, `useUIStore`) defined in `store.ts`; `App.tsx` bootstraps data and passes handlers down, but components consume stores directly via hooks.
 - **Styling**: Tailwind CSS loaded via CDN (no PostCSS/build step). Brand color overrides are injected as `!important` rules inside a `<style>` tag in `index.html` — not in any `.css` file.
 - **Charts**: Recharts. **Icons**: Lucide React.
 - **Code splitting**: every component in `components/` is wrapped in `React.lazy()` + `Suspense`.
 
-### Data Layer (`services/firebaseService.ts`)
+### Data Layer (`services/apiService.ts`)
 
-Dual-mode service — the name is a historical artifact; it now calls MongoDB:
+Dual-mode service (`firebaseService.ts` es un alias histórico que re-exporta desde aquí):
 
 - **Online**: routes all reads/writes through `fetch('/api/...')` → Express → MongoDB.
 - **Offline**: queues writes in `localStorage` under key `CRM_PENDING_WRITES_V1`; re-checks backend every 15 s and flushes the queue on reconnect.
@@ -135,4 +136,4 @@ Dual-mode service — the name is a historical artifact; it now calls MongoDB:
 
 - **Adding a new module**: create `components/YourModule.tsx`, add a lazy import + `<Route>` in `App.tsx`, add sidebar link with a Lucide icon, add a Mongoose model + `createCrudRouter` call in `server/index.js`.
 - **Brand palette**: edit the `<style>` block in `index.html` — Tailwind utility overrides use `!important`. Do not create separate CSS files.
-- **Offline safety**: any write that might fail should go through `firebaseService` functions so the offline queue handles it automatically.
+- **Offline safety**: any write that might fail should go through `apiService` functions so the offline queue handles it automatically.

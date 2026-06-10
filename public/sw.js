@@ -5,7 +5,7 @@
  *   - Static assets: Cache-first with network fallback
  *   - Offline fallback: serve cached shell if available
  */
-const CACHE_NAME = 'crm-bm-v4';
+const CACHE_NAME = 'crm-incoda-v1';
 const OFFLINE_URL = '/';
 
 const PRECACHE_URLS = [

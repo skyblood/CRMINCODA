@@ -117,10 +117,12 @@ router.put('/:id/cascade', async (req, res) => {
 // Endpoint 1D: PATCH /api/users/:id/hourly-cost — Update consultant hourly cost (costing)
 router.patch('/:id/hourly-cost', async (req, res) => {
     try {
-        const { hourlyCost, reason } = req.body;
+        const { hourlyCost } = req.body;
 
-        // Validate RBAC (only admin, finance can edit hourly costs)
-        // For now, allow all (TODO: add session.user.role check)
+        // Validate RBAC — only admin can edit hourly costs
+        if (req.session?.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Only admins can update hourly costs.' });
+        }
 
         // Validation: hourlyCost
         if (hourlyCost === undefined || hourlyCost === null) {
@@ -150,7 +152,7 @@ router.patch('/:id/hourly-cost', async (req, res) => {
         const { _id, __v, createdAt, updatedAt, passwordHash, ...rest } = doc;
 
         // Log audit (hourlyCost change is sensitive)
-        console.log(`[AUDIT] User ${req.params.id} hourly cost updated: ${reason || 'no reason'}`);
+        console.log('[AUDIT] Hourly cost updated');
 
         res.json({
             success: true,

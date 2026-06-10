@@ -31,9 +31,7 @@ import Commission from '../models/Commission.js';
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_incoda';
 
 async function migrate() {
-  console.log('Connecting to', MONGO_URI);
   await mongoose.connect(MONGO_URI);
-  console.log('Connected.\n');
 
   const projects = await Project.find({}).lean();
   const leads = await Lead.find({}).lean();

@@ -29,9 +29,7 @@ const VALID_CATEGORIES = [
 ];
 
 async function migrate() {
-  console.log('Connecting to', MONGO_URI);
   await mongoose.connect(MONGO_URI);
-  console.log('Connected.\n');
 
   const transactions = await Transaction.find({}).lean();
   console.log(`Found ${transactions.length} transactions.\n`);

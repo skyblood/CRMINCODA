@@ -180,11 +180,11 @@ const INITIAL_SKUS: SKUItem[] = [
     { id: 'sku_7', code: 'PACK-100H', name: '100h Pack', category: 'hours_pack', basePrice: 15000 }
 ];
 
-// DEMO USERS with Costs — passwords come from env vars (set VITE_SEED_PASS_* in .env)
-const INITIAL_USERS: (User & { password?: string })[] = [
-  { id: 'u1', name: 'Fabian Rojas', email: 'fabian@incoda.com.co', role: 'admin', permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: true }, monthlySalary: 5000, hourlyCost: 50, password: import.meta.env.VITE_SEED_PASS_ADMIN },
-  { id: 'u2', name: 'Sarah Connor', email: 'sarah@future.com', role: 'consultant', permissions: { dashboard: false, crm: false, projects: false, portal: true, admin: false }, monthlySalary: 0, hourlyCost: 90, password: import.meta.env.VITE_SEED_PASS_CONSULTANT },
-  { id: 'u3', name: 'Kyle Reese', email: 'kyle@tech.com', role: 'sales', permissions: { dashboard: true, crm: true, projects: false, portal: false, admin: false }, monthlySalary: 3000, hourlyCost: 0, password: import.meta.env.VITE_SEED_PASS_SALES }
+// DEMO USERS — passwords are set server-side from SEED_PASS_* env vars (never in the frontend bundle)
+const INITIAL_USERS: User[] = [
+  { id: 'u1', name: 'Fabian Rojas', email: 'fabian@incoda.com.co', role: 'admin', permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: true }, monthlySalary: 5000, hourlyCost: 50 },
+  { id: 'u2', name: 'Sarah Connor', email: 'sarah@future.com', role: 'consultant', permissions: { dashboard: false, crm: false, projects: false, portal: true, admin: false }, monthlySalary: 0, hourlyCost: 90 },
+  { id: 'u3', name: 'Kyle Reese', email: 'kyle@tech.com', role: 'sales', permissions: { dashboard: true, crm: true, projects: false, portal: false, admin: false }, monthlySalary: 3000, hourlyCost: 0 }
 ];
 
 // DEMO LEADS

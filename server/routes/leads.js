@@ -469,7 +469,6 @@ router.patch('/:id/costing-items', async (req, res) => {
 
         if (existingCostingItems.length === 0) {
             // No costingItems yet — initialize from incoming items (first save from items fallback)
-            console.log(`[COSTING-PATCH] No existing costingItems, creating ${incomingItems.length} from incoming`);
             updatedCostingItems = incomingItems.map(item => ({
                 id: item.id,
                 name: item.name,
@@ -488,7 +487,6 @@ router.patch('/:id/costing-items', async (req, res) => {
                 const incomingItem = incomingItems.find(i => i.id === costingItem.id);
                 if (incomingItem) {
                     matchedIds.add(incomingItem.id);
-                    console.log(`[COSTING-PATCH] Item ${incomingItem.id}: baseCost ${costingItem.baseCost} → ${incomingItem.baseCost}`);
                     return {
                         ...costingItem,
                         baseCost: incomingItem.baseCost !== undefined && incomingItem.baseCost !== null ? Number(incomingItem.baseCost) : costingItem.baseCost,
@@ -503,7 +501,6 @@ router.patch('/:id/costing-items', async (req, res) => {
             // Add any incoming items not found in existing costingItems
             for (const item of incomingItems) {
                 if (!matchedIds.has(item.id)) {
-                    console.log(`[COSTING-PATCH] Adding new costingItem ${item.id}`);
                     updatedCostingItems.push({
                         id: item.id,
                         name: item.name,
@@ -528,7 +525,6 @@ router.patch('/:id/costing-items', async (req, res) => {
             userId: req.user?.id || 'system',
         };
 
-        console.log(`[COSTING-PATCH] Saving ${incomingItems.length} items for lead ${req.params.id}`);
 
         const doc = await Lead.findOneAndUpdate(
             { id: req.params.id },
@@ -553,7 +549,7 @@ router.patch('/:id/costing-items', async (req, res) => {
             }
         });
     } catch (err) {
-        console.error('[COSTING-PATCH] Error:', err.message);
+        console.error('[COSTING-PATCH] Error occurred during costing patch');
         res.status(400).json({ error: err.message });
     }
 });

@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { LineItem, SKUCategory, Lead } from '../types';
 import { X, ChevronRight, ChevronLeft, Code2, Package, Zap, Globe, Settings, Check, Users, Layout, Calendar, Shield, Download, ExternalLink, Loader, GitBranch } from 'lucide-react';
+import { apiFetch, sanitizeId, sanitizeHttpsUrl } from '../services/apiFetch';
 
 export interface VeracodeConfig {
   developers: number;
@@ -198,7 +200,7 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
     setGenerateError(null);
 
     try {
-      const res = await fetch('/api/proposals/generate', {
+      const res = await apiFetch('/api/proposals/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -256,7 +258,7 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
       });
 
       const filename = `Propuesta_Veracode_${(lead.companyName ?? 'cliente').replace(/\s+/g, '_')}_${(lead.projectName ?? 'proyecto').replace(/\s+/g, '_')}.pdf`;
-      const res = await fetch(`/api/proposals/${proposalId}/upload-drive`, {
+      const res = await apiFetch(`/api/proposals/${sanitizeId(proposalId)}/upload-drive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -549,7 +551,7 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
                       </button>
                     ) : (
                       <a
-                        href={driveUrl}
+                        href={(() => { try { return sanitizeHttpsUrl(driveUrl); } catch { return '#'; } })()}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 px-4 py-2 text-sm border border-green-200 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"
@@ -572,8 +574,16 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
                       <span>Vista previa de la propuesta</span>
                       <span className="text-gray-400">Scroll para ver completa</span>
                     </div>
+                    {/* Hidden div keeps ref for html2pdf PDF export — content sanitized with DOMPurify */}
+                    <div ref={proposalRef} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(proposalHtml ?? '') }} className="sr-only" aria-hidden="true" />
                     <div className="max-h-64 overflow-y-auto">
-                      <div ref={proposalRef} dangerouslySetInnerHTML={{ __html: proposalHtml }} className="p-4 text-xs" />
+                      <iframe
+                        srcDoc={DOMPurify.sanitize(proposalHtml ?? '')}
+                        className="w-full border-0"
+                        style={{ minHeight: '240px' }}
+                        title="Proposal preview"
+                        sandbox="allow-same-origin"
+                      />
                     </div>
                   </div>
                 </div>

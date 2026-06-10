@@ -184,13 +184,18 @@ app.use('/api/v1/', makeLimit(15 * 60 * 1000, 500, 'External API rate limit exce
 app.use('/api/seed', makeLimit(60 * 60 * 1000, 2, 'Seed can only be called twice per hour.'));
 
 // ==================== SESSION ====================
+if (IS_PROD && !process.env.SESSION_SECRET) {
+    console.error('[FATAL] SESSION_SECRET env var is required in production');
+    process.exit(1);
+}
+
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+    secret: process.env.SESSION_SECRET || require('crypto').randomBytes(32).toString('hex'),
     resave: false,
     saveUninitialized: false,
     cookie: {
         httpOnly: true,
-        secure: IS_PROD && existsSync(join(__dirname, 'cert.pem')),   // solo si hay HTTPS real
+        secure: IS_PROD,   // Cloudflare Tunnel termina TLS en el edge; activar en prod siempre
         sameSite: 'lax',
         maxAge: 8 * 60 * 60 * 1000   // 8 horas
     }
@@ -324,10 +329,10 @@ const connectDB = async () => {
 
     try {
         await mongoose.connect(MONGO_URI);
-        console.log(`✅ Connected to MongoDB: ${MONGO_URI}`);
+        console.log('✅ Connected to MongoDB');  // connection string not logged
     } catch (err) {
         console.error('❌ Cannot connect to MongoDB:', err.message);
-        console.error(`   URI: ${MONGO_URI}`);
+        console.error('   URI: [redacted]');
         console.error('   Set MONGO_URI in your .env file to point to a running MongoDB instance.');
         process.exit(1);
     }
@@ -385,14 +390,11 @@ const start = async () => {
         });
         setIo(wsServer);
         httpsServer.listen(PORT, () => {
-            console.log(`\n🔒 CRM Backend running at https://localhost:${PORT}`);
-            console.log(`   API available at https://localhost:${PORT}/api\n`);
+            console.log('CRM Backend started (HTTPS)');
         });
     } else {
         httpServer.listen(PORT, () => {
-            console.log(`\n🚀 CRM Backend running at http://localhost:${PORT}`);
-            console.log(`   API available at http://localhost:${PORT}/api`);
-            console.log(`   No certs found — run: mkcert -key-file server/cert-key.pem -cert-file server/cert.pem localhost 127.0.0.1\n`);
+            console.log('CRM Backend started (HTTP)');
         });
     }
 

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Project, Task, TimeLog, ProjectType, SubTask, User, SupportTicket, TicketPriority, TicketStatus } from '../types';
 import { ManufacturerTickets } from './ManufacturerTickets';
 import { Clock, CheckCircle, BarChart2, Plus, AlertCircle, FileText, History, User as UserIcon, Circle, PlayCircle, Edit2, Save, X, TrendingDown, Users, Calendar, Settings, LifeBuoy, Briefcase, List, CheckSquare, UserPlus, Trash2, AlertTriangle, Archive, RefreshCw, Key, Ticket, ShieldAlert, ChevronDown, ChevronRight, Check } from 'lucide-react';
-import { generateProjectRiskReport } from '../services/geminiService';
+import { generateProjectRiskReport } from '../services/aiService';
 
 interface ProjectManagerProps {
   projects: Project[];

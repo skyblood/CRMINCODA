@@ -2,6 +2,7 @@
 import { io as socketIO } from 'socket.io-client';
 import { Lead, Project, User, TaskTemplate, SKUItem, Transaction, Contact } from '../types';
 import { toast } from '../components/Toast';
+import { apiFetch as apiFetchSafe, sanitizeId } from './apiFetch';
 
 /**
  * ==================================================================================
@@ -126,7 +127,7 @@ const notifyConnectionChange = () => {
 const checkApiAvailability = async (): Promise<boolean> => {
     const prevUseApi = useApi;
     try {
-        const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
+        const res = await apiFetchSafe(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
         useApi = res.ok;
     } catch {
         useApi = false;
@@ -184,7 +185,7 @@ socket.on('collection:change', async ({ collection, operation }: { collection: s
 // ==================================================================================
 
 const apiFetch = async (path: string, options?: RequestInit) => {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await apiFetchSafe(`${API_BASE}${path}`, {
         headers: { 'Content-Type': 'application/json' },
         ...options
     });

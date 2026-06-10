@@ -61,8 +61,8 @@ App.tsx                  # Root component: routing, sidebar, lazy imports
 store/index.ts           # Tres stores Zustand (data, auth, ui)
 components/              # Un archivo por módulo (lazy-loaded)
 services/
-  firebaseService.ts     # Capa de datos: fetch → Express → MongoDB
-  geminiService.ts       # Integración Gemini AI (reporte de riesgo)
+  apiService.ts          # Capa de datos dual-mode (MongoDB / offline queue)
+  aiService.ts           # Integración Anthropic Claude (reportes AI)
 server/
   index.js               # Express entry point, registra todas las rutas
   routes/crud.js         # createCrudRouter(Model) — factory CRUD genérico

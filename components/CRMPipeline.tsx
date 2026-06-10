@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Lead, SalesStage, Interaction, ProjectType, TaskTemplate, LineItem, SKUCategory, SKUItem, Transaction, ExpenseCategory, TimeLog, User, Task, Contact, StageHistoryEntry, CompletedNextStep, Pipeline } from '../types';
+import { apiFetch, sanitizeId, sanitizeEmail } from '../services/apiFetch';
 import { MoreHorizontal, Phone, Mail, Calendar, ArrowRightCircle, FileText, MapPin, Briefcase, User as UserIcon, X, StickyNote, Send, CheckCircle2, AlertTriangle, Info, AlertCircle, Plus, Trash2, ShoppingCart, DollarSign, Archive, RotateCcw, Layout, Receipt, Clock, CheckSquare, ListTodo, Save, Contact as ContactIcon, Filter, Download, Upload, FileSpreadsheet, HardDrive, Users, Percent, CreditCard, BadgeCheck, Table2, Flag, History, Shield } from 'lucide-react';
 import { DndContext, DragEndEvent, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
@@ -862,7 +863,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
 
   // Calculate Selling Price whenever Cost or Margin changes in the ADD FORM
   useEffect(() => {
-    fetch('/api/email-templates', { credentials: 'include' })
+    apiFetch('/api/email-templates', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(setEmailTemplates)
       .catch(() => {});
@@ -1058,7 +1059,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
         setInitialDeposit(0);
         setSelectedProposalId('');
         // Load saved proposals for this lead
-        fetch(`/api/proposals?leadId=${updatedLead.id}`, { credentials: 'include' })
+        apiFetch(`/api/proposals?leadId=${sanitizeId(updatedLead.id)}`, { credentials: 'include' })
             .then(r => r.ok ? r.json() : [])
             .then(list => setLeadProposals(list))
             .catch(() => setLeadProposals([]));
@@ -1197,7 +1198,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
 
     if (wonReason) updateLead({ ...leadToConvert, wonReason });
     if (selectedProposalId) {
-      fetch(`/api/proposals/${selectedProposalId}`, {
+      apiFetch(`/api/proposals/${sanitizeId(selectedProposalId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1225,7 +1226,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
       }
       setGeneratingDriveProposal(true);
       try {
-          const res = await fetch('/api/proposals/generate-technical', {
+          const res = await apiFetch('/api/proposals/generate-technical', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
@@ -1424,7 +1425,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
     if (!activeLead) return;
     setIsSavingCosting(true);
     try {
-      const response = await fetch(`/api/leads/${activeLead.id}/costing-items`, {
+      const response = await apiFetch(`/api/leads/${sanitizeId(activeLead.id)}/costing-items`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1445,7 +1446,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
     if (!activeLead) return;
     setIsSavingCosting(true);
     try {
-      const response = await fetch(`/api/leads/${activeLead.id}/costing-review`, {
+      const response = await apiFetch(`/api/leads/${sanitizeId(activeLead.id)}/costing-review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approvedBy, comment })
@@ -1936,7 +1937,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                 onChange={async (e) => {
                   const stage = e.target.value;
                   if (!stage) return;
-                  await fetch('/api/leads/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ids: selectedLeadIds, action: 'change_stage', payload: { stage } }) });
+                  await apiFetch('/api/leads/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ids: selectedLeadIds, action: 'change_stage', payload: { stage } }) });
                   setSelectedLeadIds([]);
                   e.target.value = '';
                 }}
@@ -1953,7 +1954,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                   const userId = e.target.value;
                   if (!userId) return;
                   const user = users.find(u => u.id === userId);
-                  await fetch('/api/leads/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ids: selectedLeadIds, action: 'assign_owner', payload: { assignedTo: userId, assignedToName: user?.name || '' } }) });
+                  await apiFetch('/api/leads/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ids: selectedLeadIds, action: 'assign_owner', payload: { assignedTo: userId, assignedToName: user?.name || '' } }) });
                   setSelectedLeadIds([]);
                   e.target.value = '';
                 }}
@@ -1965,7 +1966,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                 className="text-sm text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-gray-800 transition"
                 onClick={async () => {
                   if (!confirm(`Delete ${selectedLeadIds.length} leads?`)) return;
-                  await fetch('/api/leads/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ids: selectedLeadIds, action: 'delete' }) });
+                  await apiFetch('/api/leads/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ids: selectedLeadIds, action: 'delete' }) });
                   setSelectedLeadIds([]);
                 }}
               >
@@ -2191,7 +2192,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                                         setPerItemConfig(Object.fromEntries(hpItems.map(i => [i.id, defaultPerTypeConfig()])) as Record<string, PerTypeConfig>);
                                         setInitialDeposit(0);
                                         setSelectedProposalId('');
-                                        fetch(`/api/proposals?leadId=${leadToUse.id}`, { credentials: 'include' })
+                                        apiFetch(`/api/proposals?leadId=${sanitizeId(leadToUse.id)}`, { credentials: 'include' })
                                             .then(r => r.ok ? r.json() : [])
                                             .then(list => setLeadProposals(list))
                                             .catch(() => setLeadProposals([]));
@@ -3066,7 +3067,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                 <>
                     {/* INFO Tab Content */}
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm grid grid-cols-2 gap-4">
-                        <div className="flex items-center gap-3 text-sm text-gray-700"><Mail className="text-gray-400" size={16} /> <a href={`mailto:${activeLead.email}`} className="hover:text-blue-600 hover:underline">{activeLead.email}</a></div>
+                        <div className="flex items-center gap-3 text-sm text-gray-700"><Mail className="text-gray-400" size={16} /> <a href={(() => { try { return `mailto:${sanitizeEmail(activeLead.email)}`; } catch { return '#'; } })()} className="hover:text-blue-600 hover:underline">{activeLead.email}</a></div>
                         <div className="flex items-center gap-3 text-sm text-gray-700"><Phone className="text-gray-400" size={16} /> <span>{activeLead.phone}</span></div>
                         <div className="flex items-center gap-3 text-sm text-gray-700"><MapPin className="text-gray-400" size={16} /> <span>{activeLead.city}, {activeLead.country}</span></div>
                         <div className="flex items-center gap-3 text-sm text-gray-700"><Briefcase className="text-gray-400" size={16} /> <span>{activeLead.role}</span></div>
@@ -3759,7 +3760,7 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
 
             // Sync items to backend (bidirectional sync: quotation → costing)
             try {
-              const response = await fetch(`/api/leads/${activeLead.id}/items`, {
+              const response = await apiFetch(`/api/leads/${sanitizeId(activeLead.id)}/items`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

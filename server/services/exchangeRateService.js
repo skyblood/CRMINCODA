@@ -11,7 +11,12 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
  * @param {string} to - Target currency (e.g. 'USD')
  * @returns {{ rate: number, stale: boolean, source: string }}
  */
+const CURRENCY_RE = /^[A-Z]{3}$/;
+
 export async function getExchangeRate(from, to) {
+  if (!CURRENCY_RE.test(from) || !CURRENCY_RE.test(to)) {
+    throw new Error(`Invalid currency code: ${from}/${to}`);
+  }
   if (from === to) return { rate: 1, stale: false, source: 'identity' };
 
   const pair = `${from}_${to}`;
@@ -22,12 +27,12 @@ export async function getExchangeRate(from, to) {
     return { rate: cached.rate, stale: false, source: 'cache' };
   }
 
-  // 2. Fetch from frankfurter.app
+  // 2. Fetch from frankfurter.app (base URL is hardcoded; params are validated above)
   try {
-    const res = await fetch(
-      `${FRANKFURTER_BASE}/latest?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-      { signal: AbortSignal.timeout(5000) }
-    );
+    const endpoint = new URL('/latest', FRANKFURTER_BASE);
+    endpoint.searchParams.set('from', from);
+    endpoint.searchParams.set('to', to);
+    const res = await fetch(endpoint, { signal: AbortSignal.timeout(5000) });
 
     if (!res.ok) throw new Error(`frankfurter returned ${res.status}`);
 

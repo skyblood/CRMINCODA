@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Play, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, EyeOff, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { apiFetch, sanitizeId } from '../services/apiFetch';
 
 const WEBHOOK_EVENTS = [
   { key: 'lead.created', label: 'Lead Created', group: 'Leads' },
@@ -83,7 +84,7 @@ export function WebhookManager() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/webhooks');
+      const res = await apiFetch('/api/webhooks');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setWebhooks(Array.isArray(data) ? data : data.data || []);
@@ -131,14 +132,14 @@ export function WebhookManager() {
         retryPolicy: { maxRetries: form.maxRetries, retryDelayMs: form.retryDelaySeconds * 1000 },
       };
       if (editingWebhook) {
-        const res = await fetch(`/api/webhooks/${editingWebhook._id}`, {
+        const res = await apiFetch(`/api/webhooks/${sanitizeId(editingWebhook._id)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } else {
-        const res = await fetch('/api/webhooks', {
+        const res = await apiFetch('/api/webhooks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -156,7 +157,7 @@ export function WebhookManager() {
 
   const handleToggle = async (wh: Webhook) => {
     try {
-      const res = await fetch(`/api/webhooks/${wh._id}/toggle`, { method: 'PATCH' });
+      const res = await apiFetch(`/api/webhooks/${sanitizeId(wh._id)}/toggle`, { method: 'PATCH' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       fetchWebhooks();
     } catch (e: any) {
@@ -166,7 +167,7 @@ export function WebhookManager() {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/webhooks/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/webhooks/${sanitizeId(id)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDeleteConfirm(null);
       fetchWebhooks();
@@ -178,7 +179,7 @@ export function WebhookManager() {
   const handleTest = async (id: string) => {
     setTestResults((prev) => ({ ...prev, [id]: null }));
     try {
-      const res = await fetch(`/api/webhooks/${id}/test`, { method: 'POST' });
+      const res = await apiFetch(`/api/webhooks/${sanitizeId(id)}/test`, { method: 'POST' });
       const json = await res.json().catch(() => ({}));
       setTestResults((prev) => ({ ...prev, [id]: { status: json.status || res.status } }));
       setTimeout(() => setTestResults((prev) => { const n = { ...prev }; delete n[id]; return n; }), 3000);
@@ -195,7 +196,7 @@ export function WebhookManager() {
     }
     setLoadingLogs((prev) => ({ ...prev, [id]: true }));
     try {
-      const res = await fetch(`/api/webhooks/${id}/logs`);
+      const res = await apiFetch(`/api/webhooks/${sanitizeId(id)}/logs`);
       const data = await res.json();
       setExpandedLogs((prev) => ({ ...prev, [id]: Array.isArray(data) ? data : data.data || [] }));
     } catch {

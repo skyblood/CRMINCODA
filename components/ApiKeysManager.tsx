@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Key, Plus, Trash2, Copy, Check, RefreshCw, ShieldCheck, ShieldOff, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { apiFetch, sanitizeId } from '../services/apiFetch';
 
 interface ApiKey {
   id: string;
@@ -37,7 +38,7 @@ export const ApiKeysManager: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/apikeys');
+      const r = await apiFetch('/api/apikeys');
       setKeys(await r.json());
     } catch { setError('Error cargando claves'); }
     setLoading(false);
@@ -49,7 +50,7 @@ export const ApiKeysManager: React.FC = () => {
     if (!newName.trim()) { setError('Ingresa un nombre para la clave.'); return; }
     setError('');
     try {
-      const r = await fetch('/api/apikeys', {
+      const r = await apiFetch('/api/apikeys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName.trim(), scopes: newScopes }),
@@ -65,7 +66,7 @@ export const ApiKeysManager: React.FC = () => {
   };
 
   const toggleActive = async (key: ApiKey) => {
-    await fetch(`/api/apikeys/${key.id}`, {
+    await apiFetch(`/api/apikeys/${sanitizeId(key.id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: !key.active }),
@@ -75,7 +76,7 @@ export const ApiKeysManager: React.FC = () => {
 
   const deleteKey = async (id: string) => {
     if (!confirm('¿Eliminar esta clave permanentemente?')) return;
-    await fetch(`/api/apikeys/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/apikeys/${sanitizeId(id)}`, { method: 'DELETE' });
     load();
   };
 

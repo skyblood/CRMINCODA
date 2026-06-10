@@ -8,7 +8,6 @@ if (!key || key.trim() === '') {
     process.exit(1);
 }
 
-console.log(`🔑  Key encontrada: ${key.slice(0, 10)}...${key.slice(-4)}`);
 console.log('📡  Conectando a Anthropic...\n');
 
 const client = new Anthropic({ apiKey: key });

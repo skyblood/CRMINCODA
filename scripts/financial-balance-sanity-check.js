@@ -46,7 +46,7 @@ function info(msg) {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 async function run() {
-  console.log('Connecting to', MONGO_URI);
+  console.log('Connecting to database...');
   await mongoose.connect(MONGO_URI);
   console.log('Connected.\n');
 
