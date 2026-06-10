@@ -14,6 +14,7 @@ const backendProtocol = hasCerts ? 'https' : 'http'
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    preserveSymlinks: true,
     dedupe: ['react', 'react-dom', 'react-router', 'react-router-dom'],
     alias: [
       // Regex aliases so react/jsx-runtime, react/jsx-dev-runtime, and
