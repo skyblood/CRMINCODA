@@ -1,7 +1,7 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDB, teardownTestDB, clearLedgerCollections, seedChartOfAccounts } from './setup.js';
-import { postExpense, postConsultantPayment } from '../../server/services/ledgerPostingService.js';
+import { postExpense, postConsultantPayment, postPaymentReceived, postCommissionPaid } from '../../server/services/ledgerPostingService.js';
 import JournalEntry from '../../server/models/JournalEntry.js';
 
 before(setupTestDB);
@@ -68,5 +68,42 @@ describe('postConsultantPayment', () => {
     const laborLine = entry.lines.find(l => l.accountId === 'coa_6100');
     assert.equal(laborLine.debit, 3500);
     assert.equal(laborLine.entityId, 'user-bob');
+  });
+});
+
+describe('postPaymentReceived', () => {
+  it('posts Debit Cash / Credit Service Income', async () => {
+    const entry = await postPaymentReceived({
+      _id: { toString: () => 'pay_1' },
+      clientId: 'ACME Corp', clientName: 'ACME Corp',
+      paymentDate: new Date('2026-07-01'), amount: 10000, currency: 'USD',
+      amountUSD: 10000, exchangeRateToUSD: 1,
+    });
+    const cash = entry.lines.find(l => l.accountId === 'coa_1000');
+    const income = entry.lines.find(l => l.accountId === 'coa_4000');
+    assert.equal(cash.debit, 10000);
+    assert.equal(income.credit, 10000);
+    assert.equal(income.entityId, 'ACME Corp');
+  });
+
+  it('is idempotent per payment id', async () => {
+    const payment = { _id: { toString: () => 'pay_2' }, clientId: 'X', clientName: 'X', paymentDate: new Date(), amount: 1, currency: 'USD', amountUSD: 1, exchangeRateToUSD: 1 };
+    const first = await postPaymentReceived(payment);
+    const second = await postPaymentReceived(payment);
+    assert.ok(first);
+    assert.equal(second, null);
+  });
+});
+
+describe('postCommissionPaid', () => {
+  it('posts Debit Contract Labor / Credit Cash for the paid amount', async () => {
+    const entry = await postCommissionPaid({
+      _id: { toString: () => 'comm_1' },
+      projectName: 'IMPL: ACME', paidAmountUSD: 1110, amountUSD: 1110,
+    });
+    const labor = entry.lines.find(l => l.accountId === 'coa_6100');
+    const cash = entry.lines.find(l => l.accountId === 'coa_1000');
+    assert.equal(labor.debit, 1110);
+    assert.equal(cash.credit, 1110);
   });
 });

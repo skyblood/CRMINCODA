@@ -1,6 +1,6 @@
 import LedgerAccount from '../models/LedgerAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
-import { CATEGORY_TO_ACCOUNT_CODE, CASH_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
+import { CATEGORY_TO_ACCOUNT_CODE, CASH_ACCOUNT_CODE, INCOME_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
 
 async function alreadyPosted(source, sourceId) {
     if (!sourceId) return false;
@@ -75,6 +75,44 @@ export async function postConsultantPayment(tx) {
         lines: [
             makeLine(laborAccount.id, tx.amount, amountUSD, true, { currency: tx.currency, exchangeRateToUSD: tx.exchangeRateToUSD, entityId: tx.consultantId || '' }),
             makeLine(cashAccount.id, tx.amount, amountUSD, false, { currency: tx.currency, exchangeRateToUSD: tx.exchangeRateToUSD }),
+        ],
+    });
+}
+
+/** Debit Cash, Credit Service Income. Invoice issuance never posts (cash-basis). */
+export async function postPaymentReceived(payment) {
+    const sourceId = payment._id.toString();
+    if (await alreadyPosted('payment', sourceId)) return null;
+    const cashAccount = await requireAccount({ code: CASH_ACCOUNT_CODE }, `payment ${sourceId}`);
+    const incomeAccount = await requireAccount({ code: INCOME_ACCOUNT_CODE }, `payment ${sourceId}`);
+    const currencyOpts = { currency: payment.currency, exchangeRateToUSD: payment.exchangeRateToUSD, entityId: payment.clientId };
+    return JournalEntry.create({
+        date: payment.paymentDate,
+        memo: `Payment from ${payment.clientName}`,
+        source: 'payment',
+        sourceId,
+        lines: [
+            makeLine(cashAccount.id, payment.amount, payment.amountUSD, true, currencyOpts),
+            makeLine(incomeAccount.id, payment.amount, payment.amountUSD, false, currencyOpts),
+        ],
+    });
+}
+
+/** Debit Contract Labor, Credit Cash, for the amount actually paid out on a commission. */
+export async function postCommissionPaid(commission) {
+    const sourceId = commission._id.toString();
+    if (await alreadyPosted('commission', sourceId)) return null;
+    const laborAccount = await requireAccount({ code: CATEGORY_TO_ACCOUNT_CODE.consultant_payment }, `commission ${sourceId}`);
+    const cashAccount = await requireAccount({ code: CASH_ACCOUNT_CODE }, `commission ${sourceId}`);
+    const amountUSD = commission.paidAmountUSD || commission.amountUSD;
+    return JournalEntry.create({
+        date: new Date(),
+        memo: `Commission — ${commission.projectName}`,
+        source: 'commission',
+        sourceId,
+        lines: [
+            makeLine(laborAccount.id, amountUSD, amountUSD, true, {}),
+            makeLine(cashAccount.id, amountUSD, amountUSD, false, {}),
         ],
     });
 }
