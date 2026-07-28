@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { setupTestDB, teardownTestDB, clearLedgerCollections, seedChartOfAccounts } from './setup.js';
 import Transaction from '../../server/models/Transaction.js';
 import Payment from '../../server/models/Payment.js';
+import Commission from '../../server/models/Commission.js';
 import JournalEntry from '../../server/models/JournalEntry.js';
 
 before(setupTestDB);
@@ -91,5 +92,37 @@ describe('Payment posting hook', () => {
     assert.ok(entry);
     const reloaded = await Payment.findById(payment._id).lean();
     assert.equal(reloaded.postingStatus, 'posted');
+  });
+});
+
+describe('Commission posting hook', () => {
+  it('posts a journal entry when status transitions to paid via findOneAndUpdate', async () => {
+    const commission = await Commission.create({
+      projectId: 'proj-1', projectName: 'IMPL: ACME', clientId: 'ACME', clientName: 'ACME',
+      rate: 10, revenueUSD: 20000, costUSD: 8900, netUtilityUSD: 11100, amountUSD: 1110,
+      split: { bmRetainedUSD: 400, fabianShareUSD: 355, spencerShareUSD: 355 },
+      status: 'approved',
+    });
+    await Commission.findOneAndUpdate(
+      { _id: commission._id },
+      { $set: { status: 'paid', paidAmountUSD: 1110 } },
+      { new: true },
+    );
+    await tick();
+    const entry = await JournalEntry.findOne({ source: 'commission', sourceId: commission._id.toString() });
+    assert.ok(entry);
+  });
+
+  it('does not post when the update does not set status to paid', async () => {
+    const commission = await Commission.create({
+      projectId: 'proj-2', projectName: 'HOURS: Beta', clientId: 'Beta', clientName: 'Beta',
+      rate: 15, revenueUSD: 10000, costUSD: 3000, netUtilityUSD: 7000, amountUSD: 1050,
+      split: { bmRetainedUSD: 380, fabianShareUSD: 335, spencerShareUSD: 335 },
+      status: 'pending',
+    });
+    await Commission.findOneAndUpdate({ _id: commission._id }, { $set: { notes: 'reviewed' } });
+    await tick();
+    const entry = await JournalEntry.findOne({ source: 'commission', sourceId: commission._id.toString() });
+    assert.equal(entry, null);
   });
 });
