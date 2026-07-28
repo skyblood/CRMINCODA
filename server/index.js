@@ -54,6 +54,7 @@ import balanceSheetAccountsRouter from './routes/balanceSheetAccounts.js';
 import balanceSheetNotesRouter from './routes/balanceSheetNotes.js';
 import ledgerAccountsRouter from './routes/ledgerAccounts.js';
 import journalEntriesRouter from './routes/journalEntries.js';
+import ledgerReportsRouter from './routes/ledgerReports.js';
 import { ensureChartOfAccountsSeeded } from './seed/chartOfAccounts.js';
 import apiKeysRouter from './routes/apiKeys.js';
 import externalRouter from './routes/external.js';
@@ -147,7 +148,7 @@ const readRoutes = [
     '/api/transactions', '/api/skus', '/api/templates', '/api/goals',
     '/api/balanceSheetAccounts', '/api/balanceSheetNotes',
     '/api/accounts', '/api/activities', '/api/automations',
-    '/api/ledger-accounts', '/api/journal-entries',
+    '/api/ledger-accounts', '/api/journal-entries', '/api/ledger-reports',
 ];
 readRoutes.forEach(route => {
     app.get(route, makeLimit(15 * 60 * 1000, 600, 'Too many read requests.'));
@@ -243,6 +244,7 @@ app.use('/api/balanceSheetAccounts', balanceSheetAccountsRouter);
 app.use('/api/balanceSheetNotes', balanceSheetNotesRouter);
 app.use('/api/ledger-accounts', ledgerAccountsRouter);
 app.use('/api/journal-entries', journalEntriesRouter);
+app.use('/api/ledger-reports', ledgerReportsRouter);
 app.use('/api/apikeys', apiKeysRouter);
 app.use('/api/v1', externalRouter);
 app.use('/api/search', searchRouter);
