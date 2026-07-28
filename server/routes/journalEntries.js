@@ -16,12 +16,19 @@ async function isPeriodClosed(date) {
 router.get('/', async (req, res) => {
     try {
         const filter = {};
-        if (req.query.accountId) filter['lines.accountId'] = req.query.accountId;
-        if (req.query.status) filter.status = req.query.status;
-        if (req.query.from || req.query.to) {
+        // Only accept plain string query values — express/qs will parse
+        // `?accountId[$ne]=null` into an object, and assigning that object
+        // straight into a Mongo filter would inject a raw operator. The
+        // global sanitizeQuery middleware only strips top-level `$` keys,
+        // not nested ones, so this route must guard it itself.
+        if (typeof req.query.accountId === 'string') filter['lines.accountId'] = req.query.accountId;
+        if (typeof req.query.status === 'string') filter.status = req.query.status;
+        const hasFrom = typeof req.query.from === 'string';
+        const hasTo = typeof req.query.to === 'string';
+        if (hasFrom || hasTo) {
             filter.date = {};
-            if (req.query.from) filter.date.$gte = new Date(req.query.from);
-            if (req.query.to) filter.date.$lte = new Date(req.query.to);
+            if (hasFrom) filter.date.$gte = new Date(req.query.from);
+            if (hasTo) filter.date.$lte = new Date(req.query.to);
         }
         const docs = await JournalEntry.find(filter).sort({ date: -1 }).limit(1000).lean();
         res.json(docs);
@@ -34,7 +41,11 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const payload = deepSanitize(req.body, true);
-        if (await isPeriodClosed(payload.date)) {
+        const parsedDate = payload.date != null ? new Date(payload.date) : null;
+        if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+            return res.status(400).json({ error: 'A valid date is required to create a journal entry.' });
+        }
+        if (await isPeriodClosed(parsedDate)) {
             return res.status(409).json({ error: `Period ${payload.date} is closed. Reopen it before adding entries.` });
         }
         const doc = await JournalEntry.create({ ...payload, source: payload.source || 'manual' });
@@ -63,14 +74,20 @@ router.post('/:id/void', async (req, res) => {
     }
 });
 
-// ── CLOSE PERIOD ──────────────────────────────────────────────────────────────
+// ── CLOSE PERIOD (admin only) ────────────────────────────────────────────────
 router.post('/close-period', async (req, res) => {
+    if (req.session?.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Forbidden: admin role required to close a period' });
+    }
     try {
         const { year, month } = req.body;
+        if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+            return res.status(400).json({ error: 'A valid integer year and month (1-12) are required to close a period.' });
+        }
         const doc = await LedgerPeriodClose.findOneAndUpdate(
             { year, month },
             { $setOnInsert: { id: `close_${year}_${month}`, year, month, closedBy: req.session?.user?.email || '' } },
-            { upsert: true, new: true },
+            { upsert: true, new: true, runValidators: true },
         );
         res.status(201).json(doc);
     } catch (err) {
