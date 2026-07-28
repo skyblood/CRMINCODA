@@ -47,10 +47,26 @@ TransactionSchema.post('save', async function postToLedger(doc) {
     try {
         const poster = doc.category === 'consultant_payment' ? postConsultantPayment : postExpense;
         await poster(doc.toObject());
-        await mongoose.model('Transaction').updateOne({ _id: doc._id }, { $set: { postingStatus: 'posted' } });
+        try {
+            await mongoose.model('Transaction').updateOne({ _id: doc._id }, { $set: { postingStatus: 'posted' } });
+        } catch (statusErr) {
+            // The journal entry WAS posted — this is only a failure to record that
+            // fact on the Transaction doc. Log distinctly; do not mark 'failed'
+            // (that would misrepresent a successful posting) and do not rethrow
+            // (a status-write failure must never block the original save()).
+            console.error(`[ledger] Transaction ${doc.id} posted successfully but failed to record postingStatus=posted:`, statusErr.stack || statusErr);
+        }
     } catch (err) {
-        console.error(`[ledger] Failed to post Transaction ${doc.id}:`, err.message);
-        await mongoose.model('Transaction').updateOne({ _id: doc._id }, { $set: { postingStatus: 'failed' } });
+        console.error(`[ledger] Failed to post Transaction ${doc.id}:`, err.stack || err);
+        try {
+            await mongoose.model('Transaction').updateOne({ _id: doc._id }, { $set: { postingStatus: 'failed' } });
+        } catch (statusErr) {
+            // Recovery write also failed (e.g. a correlated Mongo blip). Swallow
+            // it — this hook must never reject, or it would propagate into the
+            // caller's save()/create() promise per Mongoose's async post-hook
+            // semantics, even though the document was already persisted.
+            console.error(`[ledger] Also failed to record postingStatus=failed for Transaction ${doc.id}:`, statusErr.stack || statusErr);
+        }
     }
 });
 

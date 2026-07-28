@@ -40,6 +40,37 @@ describe('Transaction posting hook', () => {
     assert.equal(reloaded.postingStatus, 'failed');
   });
 
+  it('never propagates an error out of save()/create() even when the failure-recovery updateOne also fails', async () => {
+    // Force poster() to throw (no chart of accounts)...
+    await JournalEntry.deleteMany({});
+    await (await import('../../server/models/LedgerAccount.js')).default.deleteMany({});
+
+    // ...AND force the hook's own recovery updateOne (the one that tries to
+    // record postingStatus='failed') to also reject, simulating a correlated
+    // Mongo blip. Per Mongoose's async post-save-hook semantics, an unguarded
+    // rejection in this second step would propagate into the original
+    // Transaction.create() promise even though the document was already
+    // persisted — this is exactly the regression this test guards against.
+    const originalUpdateOne = Transaction.updateOne;
+    Transaction.updateOne = async () => { throw new Error('simulated Mongo connection blip'); };
+
+    let created;
+    try {
+      await assert.doesNotReject(async () => {
+        created = await Transaction.create({ id: 'tx_h5', title: 'AWS', amount: 100, amountUSD: 100, currency: 'USD', exchangeRateToUSD: 1, category: 'software', type: 'expense', date: '2026-07-01' });
+      });
+    } finally {
+      Transaction.updateOne = originalUpdateOne;
+    }
+
+    assert.ok(created);
+    await tick();
+    // Both the posting attempt and the postingStatus write failed, so the
+    // field never got updated off its schema default.
+    const reloaded = await Transaction.findOne({ id: 'tx_h5' }).lean();
+    assert.equal(reloaded.postingStatus, 'n/a');
+  });
+
   it('does not repost on update', async () => {
     await Transaction.create({ id: 'tx_h4', title: 'AWS', amount: 100, amountUSD: 100, currency: 'USD', exchangeRateToUSD: 1, category: 'software', type: 'expense', date: '2026-07-01' });
     await tick();
