@@ -111,21 +111,51 @@ calculado sobre `amountUSD` para que multi-moneda no rompa el balance.
 **Backend**
 
 - `server/models/LedgerAccount.js`, `server/models/JournalEntry.js` — nuevos.
-- `server/services/ledgerPostingService.js` — nuevo. Funciones: `postExpense(tx)`,
+- `server/services/ledgerPostingService.js` — nuevo. Funciones puras: `postExpense(tx)`,
   `postPaymentReceived(payment)`, `postConsultantPayment(tx)`,
-  `postCommissionPaid(commission)`. Se invocan desde las rutas existentes de
-  Transaction/Payment/Commission después de guardar. Si el posteo falla, la operación
-  original igual se guarda (no bloquea el flujo operativo); se marca
-  `postingStatus: 'failed'` para reintento manual desde Ledger.
+  `postCommissionPaid(commission)`. Cada una crea y guarda un `JournalEntry` de forma
+  independiente — **sin transacciones multi-documento de Mongo** (ver nota de
+  infraestructura abajo). Si el posteo falla, la operación original igual queda
+  guardada (no bloquea el flujo operativo); se marca `postingStatus: 'failed'` en el
+  doc de origen para reintento manual desde Ledger.
+
+  **Punto de enganche: middleware de Mongoose, no las rutas Express.** Se usa
+  `TransactionSchema.post('save', ...)`, `PaymentSchema.post('save', ...)`,
+  `CommissionSchema.post('findOneAndUpdate', ...)` (para el cambio a
+  `status: 'paid'`), envueltos en try/catch interno que nunca relanza el error. Se
+  eligió esto en vez de insertar llamadas dentro de `transactions.js`/`payments.js`/
+  `invoices.js` porque: (a) `commissions.js` usa el `createCrudRouter` genérico —no
+  hay código propio en la ruta donde enganchar—, y (b) evita tocar lógica ya
+  delicada en `invoices.js` (recálculo de estado de factura, webhooks). El hook debe
+  capturar sus propios errores; nunca debe hacer que el `save()`/`findOneAndUpdate()`
+  original falle.
+
+  > **Nota de infraestructura — por qué no hay atomicidad de base de datos**: se
+  > confirmó (`grep -rn "startSession" server/`) que el código actual no usa
+  > transacciones de Mongo en ningún lado. Tanto Mongo en producción
+  > (`127.0.0.1:27017`, standalone) como `mongodb-memory-server` en tests
+  > (`tests/financial-balance/setup.js`, también standalone) corren sin replica set.
+  > `session.startTransaction()` falla en Mongo standalone con
+  > `Transaction numbers are only allowed on a replica set member or mongos`. Por
+  > eso el posteo contable es deliberadamente *best-effort*, no atómico —
+  > consistente con el manejo de errores ya definido más abajo.
+
 - `server/routes/ledger.js` — nuevo. Endpoints: plan de cuentas (CRUD), asientos
   (list/create/void), trial balance, P&L (`?start&end`), Balance Sheet (`?asOf`),
-  import CSV de Mercury, conciliación, reporte 1099 (`?year`).
+  import CSV de Mercury, conciliación, reporte 1099 (`?year`). Cada mutación llama
+  `emitCollectionChange('ledgerAccounts'|'journalEntries', ...)` (igual que
+  `payments.js`/`invoices.js`) para que la UI se actualice en vivo por socket —
+  `transactions.js` hoy no lo hace y no debe tomarse como referencia. Agregar las
+  nuevas rutas de escritura a los arrays `dataRoutes`/`readRoutes` de rate-limiting en
+  `server/index.js`, igual que el resto de módulos de datos.
 
 **Frontend**
 
-- `components/Ledger.tsx` — nuevo módulo, nueva entrada en sidebar, restringido a rol
-  `admin`. Pestañas: Plan de Cuentas, Libro Diario, Gastos de la Empresa,
-  Conciliación Mercury, P&L, Balance Sheet, Reporte 1099.
+- `components/Ledger.tsx` — nuevo módulo, nueva entrada en sidebar. Restringido vía
+  un nuevo flag `permissions.finance` en el objeto `User.permissions` (que ya sigue
+  el patrón `{dashboard, crm, projects, portal, admin}`), con `role === 'admin'`
+  siempre con bypass — igual convención que el resto de módulos, no un chequeo
+  aislado de solo `role`.
 - `components/FinanceManager.tsx` — se quita la opción `general` (no ligada a
   proyecto/lead) del modal de "Agregar Gasto"; el componente sigue siendo el único
   lugar para gastos de proyecto/lead.
@@ -172,6 +202,14 @@ calculado sobre `amountUSD` para que multi-moneda no rompa el balance.
   existente.
 
 ## Plan de pruebas
+
+El runner real del proyecto es el test runner nativo de Node (`node --import
+tsx/esm --test tests/*.test.ts`, ver `package.json`), no vitest pese a estar como
+devDependency. Los tests de integración usan `mongodb-memory-server` standalone,
+siguiendo el patrón ya existente en `tests/financial-balance/setup.js`
+(`setupTestDB`/`teardownTestDB`/`clearCollections`/`seedTestData`) — los tests nuevos
+de Ledger deben extender ese mismo setup (agregar `LedgerAccount`/`JournalEntry` a
+`clearCollections`) en vez de crear un harness paralelo.
 
 - Unitarias `ledgerPostingService`: asientos balanceados en mono-moneda,
   multi-moneda (vía `ExchangeRateCache` existente), y montos negativos (reembolsos).
