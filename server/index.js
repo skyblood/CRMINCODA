@@ -52,6 +52,8 @@ import Project from './models/Project.js';
 import Settings from './models/Settings.js';
 import balanceSheetAccountsRouter from './routes/balanceSheetAccounts.js';
 import balanceSheetNotesRouter from './routes/balanceSheetNotes.js';
+import ledgerAccountsRouter from './routes/ledgerAccounts.js';
+import { ensureChartOfAccountsSeeded } from './seed/chartOfAccounts.js';
 import apiKeysRouter from './routes/apiKeys.js';
 import externalRouter from './routes/external.js';
 import searchRouter from './routes/search.js';
@@ -144,6 +146,7 @@ const readRoutes = [
     '/api/transactions', '/api/skus', '/api/templates', '/api/goals',
     '/api/balanceSheetAccounts', '/api/balanceSheetNotes',
     '/api/accounts', '/api/activities', '/api/automations',
+    '/api/ledger-accounts',
 ];
 readRoutes.forEach(route => {
     app.get(route, makeLimit(15 * 60 * 1000, 600, 'Too many read requests.'));
@@ -158,6 +161,7 @@ const dataRoutes = [
     '/api/transactions', '/api/skus', '/api/templates', '/api/goals',
     '/api/balanceSheetAccounts', '/api/balanceSheetNotes', '/api/apikeys',
     '/api/settings', '/api/accounts', '/api/automations',
+    '/api/ledger-accounts',
 ];
 dataRoutes.forEach(route => {
     app.post(route, writeLimit);
@@ -236,6 +240,7 @@ app.use('/api/seed', seedRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/balanceSheetAccounts', balanceSheetAccountsRouter);
 app.use('/api/balanceSheetNotes', balanceSheetNotesRouter);
+app.use('/api/ledger-accounts', ledgerAccountsRouter);
 app.use('/api/apikeys', apiKeysRouter);
 app.use('/api/v1', externalRouter);
 app.use('/api/search', searchRouter);
@@ -385,6 +390,7 @@ const KEY_PATH  = join(__dirname, 'cert-key.pem');
 
 const start = async () => {
     await connectDB();
+    await ensureChartOfAccountsSeeded().catch(e => console.error('[startup] chart of accounts seed failed:', e.message));
     resumePendingRetries().catch(e => console.error('[startup] webhook resume failed:', e.message));
 
     const hasCerts = existsSync(CERT_PATH) && existsSync(KEY_PATH);

@@ -1,6 +1,8 @@
 // Default chart of accounts for a small services LLC (cash-basis, Schedule C).
 // Seeded idempotently on server startup (see server/index.js) — safe to run
 // every boot because it's an upsert-by-code, not an insert.
+import LedgerAccount from '../models/LedgerAccount.js';
+
 export const DEFAULT_CHART_OF_ACCOUNTS = [
   { id: 'coa_1000', code: '1000', name: 'Cash — Mercury Checking', type: 'asset' },
   { id: 'coa_1100', code: '1100', name: 'Accounts Receivable (informational)', type: 'asset' },
@@ -38,3 +40,18 @@ export const CATEGORY_TO_ACCOUNT_CODE = {
   consultant_payment:  '6100',
   other:               '7900',
 };
+
+/**
+ * Upsert-by-code seeding, safe to call on every server start. Only inserts
+ * accounts that don't already exist by `code`; never overwrites an existing
+ * account (the user may have renamed/edited it from the UI).
+ */
+export async function ensureChartOfAccountsSeeded() {
+    for (const account of DEFAULT_CHART_OF_ACCOUNTS) {
+        await LedgerAccount.updateOne(
+            { code: account.code },
+            { $setOnInsert: account },
+            { upsert: true },
+        );
+    }
+}
