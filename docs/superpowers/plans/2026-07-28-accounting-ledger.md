@@ -17,7 +17,7 @@
 - New write routes must be registered in the `readRoutes`/`dataRoutes` rate-limit arrays in `server/index.js`, matching the existing pattern for every other data module.
 - Module access is gated by a new `permissions.finance` boolean on `User`, following the existing `permissions: {dashboard, crm, projects, portal, admin}` pattern — `role === 'admin'` always bypasses, exactly like every other module.
 - No new npm dependencies. The Mercury CSV parser is hand-written (no `csv-parse` etc. is in `package.json`).
-- Test runner is `node --import tsx/esm --test tests/*.test.ts` (see `package.json`), **not** vitest. Integration tests use `mongodb-memory-server`, following the existing pattern in `tests/financial-balance/setup.js`.
+- This project has two test runners in play: `pnpm test` runs `node --import tsx/esm --test tests/*.test.ts` (top-level `.ts` files only — the glob does not descend into subdirectories), while `tests/financial-balance/financial-balance.test.js` imports from `vitest` and only runs via `pnpm exec vitest run tests/financial-balance/`. All new tests in this plan (`tests/ledger/*.test.ts`) import from `node:test` (matching `tests/business.test.ts`) and must be run by explicit path, e.g. `node --import tsx/esm --test tests/ledger/*.test.ts` — never assume a bare `pnpm test` exercises them. Integration tests use `mongodb-memory-server` (confirmed working in this environment — it downloads and runs MongoDB 7.0.24 standalone), following the existing pattern in `tests/financial-balance/setup.js`.
 - IDs: models reachable through the generic `createCrudRouter` (`LedgerAccount`) need a custom `id: String` field (client-generated, e.g. `` `la_${Date.now()}` ``, matching `components/AccountManager.tsx`'s convention). Models with hand-written routes (`JournalEntry`) use Mongo's native `_id`, matching `Payment`/`Commission`.
 
 ---
@@ -927,8 +927,11 @@ Expected: PASS (5 tests)
 
 - [ ] **Step 5: Run the full existing test suite to confirm nothing broke**
 
-Run: `pnpm test`
-Expected: All prior tests (`tests/business.test.ts`, `tests/financial-balance/financial-balance.test.js`) still PASS — this task only adds fields/hooks, it doesn't change existing required fields or route behavior.
+Run: `pnpm test` (this only covers top-level `tests/*.test.ts`, i.e. `tests/business.test.ts` — `pnpm test`'s glob does not descend into `tests/financial-balance/` or `tests/ledger/`; see Global Constraints)
+Expected: All prior tests still PASS — this task only adds fields/hooks, it doesn't change existing required fields or route behavior.
+
+Also run: `pnpm exec vitest run tests/financial-balance/` (this suite runs under vitest, not `node:test` — confirmed by inspecting its imports)
+Expected: All 45 tests still PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -3093,8 +3096,11 @@ Run `pnpm dev:full`. Log in as the admin demo user (`fabian@incoda.com.co`). Con
 
 - [ ] **Step 6: Run the full test suite one more time**
 
-Run: `pnpm test`
-Expected: All tests pass — the new `tests/ledger/*.test.ts` files plus the pre-existing `tests/business.test.ts` and `tests/financial-balance/financial-balance.test.js`.
+Run: `node --import tsx/esm --test tests/*.test.ts tests/ledger/*.test.ts` (covers `tests/business.test.ts` plus every `node:test`-based ledger test from Tasks 1-11 in one invocation — `pnpm test`'s glob alone would silently skip the `tests/ledger/` subdirectory)
+Expected: All tests pass.
+
+Also run: `pnpm exec vitest run tests/financial-balance/`
+Expected: All 45 tests pass (this suite runs under vitest, not `node:test`; unrelated to this plan's changes but confirms nothing in Tasks 1-17 broke it, e.g. via a shared model field).
 
 - [ ] **Step 7: Commit**
 
