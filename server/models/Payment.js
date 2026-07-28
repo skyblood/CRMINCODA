@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { postPaymentReceived } from '../services/ledgerPostingService.js';
 
 const ISO_4217_CODES = [
   'USD', 'COP', 'EUR', 'GBP', 'BRL', 'MXN', 'CAD', 'AUD', 'CHF', 'JPY',
@@ -52,10 +53,33 @@ const PaymentSchema = new mongoose.Schema({
   // Audit
   createdBy: String,
   notes: String,
+
+  // Ledger (double-entry) support — see server/services/ledgerPostingService.js
+  postingStatus: { type: String, enum: ['posted', 'failed', 'n/a'], default: 'n/a' },
 }, { timestamps: true, strict: true });
 
 PaymentSchema.index({ paymentDate: -1 });
 PaymentSchema.index({ clientId: 1, paymentDate: -1 });
 PaymentSchema.index({ 'appliedTo.invoiceId': 1 });
+
+// Mongoose doesn't give post('save') a reliable "was this an insert" flag
+// out of the box on all versions, so we capture it ourselves in pre('save').
+PaymentSchema.pre('save', function captureWasNew(next) {
+    this.wasNew = this.isNew;
+    next();
+});
+
+// Auto-post to the general ledger on creation only (not on every edit).
+// Never lets a posting failure block the write that triggered it.
+PaymentSchema.post('save', async function postToLedger(doc) {
+    if (!doc.wasNew) return;
+    try {
+        await postPaymentReceived(doc.toObject());
+        await mongoose.model('Payment').updateOne({ _id: doc._id }, { $set: { postingStatus: 'posted' } });
+    } catch (err) {
+        console.error(`[ledger] Failed to post Payment ${doc._id}:`, err.message);
+        await mongoose.model('Payment').updateOne({ _id: doc._id }, { $set: { postingStatus: 'failed' } });
+    }
+});
 
 export default mongoose.model('Payment', PaymentSchema);
