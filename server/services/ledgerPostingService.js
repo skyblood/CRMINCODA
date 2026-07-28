@@ -1,6 +1,6 @@
 import LedgerAccount from '../models/LedgerAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
-import { CATEGORY_TO_ACCOUNT_CODE, CASH_ACCOUNT_CODE, INCOME_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
+import { CATEGORY_TO_ACCOUNT_CODE, CASH_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
 
 async function alreadyPosted(source, sourceId) {
     if (!sourceId) return false;
