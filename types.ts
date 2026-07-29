@@ -375,11 +375,12 @@ export interface DashboardStats {
 export type UserRole = 'admin' | 'sales' | 'consultant';
 
 export interface ModulePermissions {
-  dashboard: boolean; 
+  dashboard: boolean;
   crm: boolean;
   projects: boolean;
   portal: boolean;
   admin: boolean;
+  finance: boolean;
 }
 
 export interface SalaryRecord {

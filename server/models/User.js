@@ -9,7 +9,7 @@ const UserSchema = new mongoose.Schema({
     passwordHash: { type: String, default: null },
     permissions: {
         type: mongoose.Schema.Types.Mixed,
-        default: { dashboard: false, crm: false, projects: false, portal: true, admin: false }
+        default: { dashboard: false, crm: false, projects: false, portal: true, admin: false, finance: false }
     },
     hourlyCost: { type: Number, default: 0 },
     costModel: { type: String, default: 'burdened' }, // 'burdened' = salary + 30% overhead

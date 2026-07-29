@@ -182,9 +182,9 @@ const INITIAL_SKUS: SKUItem[] = [
 
 // DEMO USERS — passwords are set server-side from SEED_PASS_* env vars (never in the frontend bundle)
 const INITIAL_USERS: User[] = [
-  { id: 'u1', name: 'Fabian Rojas', email: 'fabian@incoda.com.co', role: 'admin', permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: true }, monthlySalary: 5000, hourlyCost: 50 },
-  { id: 'u2', name: 'Sarah Connor', email: 'sarah@future.com', role: 'consultant', permissions: { dashboard: false, crm: false, projects: false, portal: true, admin: false }, monthlySalary: 0, hourlyCost: 90 },
-  { id: 'u3', name: 'Kyle Reese', email: 'kyle@tech.com', role: 'sales', permissions: { dashboard: true, crm: true, projects: false, portal: false, admin: false }, monthlySalary: 3000, hourlyCost: 0 }
+  { id: 'u1', name: 'Fabian Rojas', email: 'fabian@incoda.com.co', role: 'admin', permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: true, finance: true }, monthlySalary: 5000, hourlyCost: 50 },
+  { id: 'u2', name: 'Sarah Connor', email: 'sarah@future.com', role: 'consultant', permissions: { dashboard: false, crm: false, projects: false, portal: true, admin: false, finance: false }, monthlySalary: 0, hourlyCost: 90 },
+  { id: 'u3', name: 'Kyle Reese', email: 'kyle@tech.com', role: 'sales', permissions: { dashboard: true, crm: true, projects: false, portal: false, admin: false, finance: false }, monthlySalary: 3000, hourlyCost: 0 }
 ];
 
 // DEMO LEADS

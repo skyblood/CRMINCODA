@@ -19,7 +19,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
     crm: false,
     projects: false,
     portal: true,
-    admin: false
+    admin: false,
+    finance: false
   };
 
   const initialFormState = {
@@ -36,11 +37,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
   const getPermissionsForRole = (role: UserRole): ModulePermissions => {
     switch (role) {
       case 'admin':
-        return { dashboard: true, crm: true, projects: true, portal: true, admin: true };
+        return { dashboard: true, crm: true, projects: true, portal: true, admin: true, finance: true };
       case 'sales':
-        return { dashboard: true, crm: true, projects: false, portal: false, admin: false };
+        return { dashboard: true, crm: true, projects: false, portal: false, admin: false, finance: false };
       case 'consultant':
-        return { dashboard: false, crm: false, projects: false, portal: true, admin: false }; // No dashboard for consultants
+        return { dashboard: false, crm: false, projects: false, portal: true, admin: false, finance: false }; // No dashboard for consultants
       default:
         return defaultPermissions;
     }
@@ -358,12 +359,27 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                         <span className="text-sm font-medium text-gray-700">System Admin</span>
                         <span className="text-xs text-gray-500">Manage users and settings.</span>
                       </div>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => togglePermission('admin')}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${formData.permissions.admin ? 'bg-blue-600' : 'bg-gray-200'}`}
                       >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${formData.permissions.admin ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+
+                    {/* Finance / Ledger Permission */}
+                    <div className="flex items-center justify-between border-t border-gray-200 pt-3">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-gray-700">Finance / Ledger</span>
+                        <span className="text-xs text-gray-500">Access accounting ledger and financial statements.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => togglePermission('finance')}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${formData.permissions.finance ? 'bg-blue-600' : 'bg-gray-200'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${formData.permissions.finance ? 'translate-x-6' : 'translate-x-1'}`} />
                       </button>
                     </div>
 
