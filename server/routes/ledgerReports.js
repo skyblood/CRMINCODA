@@ -112,4 +112,39 @@ router.get('/balance-sheet', async (req, res) => {
     }
 });
 
+// ── 1099-NEC THRESHOLD REPORT ────────────────────────────────────────────────────
+const NEC_1099_THRESHOLD_USD = 600;
+const CONTRACT_LABOR_ACCOUNT_CODE = '6100';
+
+router.get('/1099', async (req, res) => {
+    try {
+        const year = Number(req.query.year) || new Date().getFullYear();
+        const laborAccount = await LedgerAccount.findOne({ code: CONTRACT_LABOR_ACCOUNT_CODE }).lean();
+        if (!laborAccount) return res.json([]);
+
+        const entries = await JournalEntry.find({
+            status: 'posted',
+            date: { $gte: new Date(`${year}-01-01`), $lte: new Date(`${year}-12-31T23:59:59.999Z`) },
+            'lines.accountId': laborAccount.id,
+        }).lean();
+
+        const totals = {}; // entityId -> totalUSD
+        for (const entry of entries) {
+            for (const line of entry.lines) {
+                if (line.accountId !== laborAccount.id || !line.entityId || line.debit <= 0) continue;
+                totals[line.entityId] = (totals[line.entityId] || 0) + line.amountUSD;
+            }
+        }
+
+        const rows = Object.entries(totals).map(([entityId, totalUSD]) => ({
+            entityId,
+            totalUSD,
+            crossesThreshold: totalUSD >= NEC_1099_THRESHOLD_USD,
+        }));
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;

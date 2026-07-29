@@ -74,3 +74,38 @@ describe('GET /api/ledger-reports/balance-sheet', () => {
     assert.equal(res.body.balanced, true);
   });
 });
+
+describe('GET /api/ledger-reports/1099', () => {
+  beforeEach(async () => {
+    await JournalEntry.create({
+      date: new Date('2026-03-01'), source: 'payroll',
+      lines: [
+        { accountId: 'coa_6100', debit: 4000, amountUSD: 4000, entityId: 'user-alice' },
+        { accountId: 'coa_1000', credit: 4000, amountUSD: 4000 },
+      ],
+    });
+    await JournalEntry.create({
+      date: new Date('2026-04-01'), source: 'payroll',
+      lines: [
+        { accountId: 'coa_6100', debit: 300, amountUSD: 300, entityId: 'user-bob' },
+        { accountId: 'coa_1000', credit: 300, amountUSD: 300 },
+      ],
+    });
+  });
+
+  it('aggregates Contract Labor payments by entityId for the given year', async () => {
+    const res = await request(app).get('/api/ledger-reports/1099?year=2026');
+    assert.equal(res.status, 200);
+    const alice = res.body.find((r: any) => r.entityId === 'user-alice');
+    const bob = res.body.find((r: any) => r.entityId === 'user-bob');
+    assert.equal(alice.totalUSD, 4000);
+    assert.equal(alice.crossesThreshold, true);
+    assert.equal(bob.totalUSD, 300);
+    assert.equal(bob.crossesThreshold, false);
+  });
+
+  it('excludes years outside the requested range', async () => {
+    const res = await request(app).get('/api/ledger-reports/1099?year=2025');
+    assert.deepEqual(res.body, []);
+  });
+});
