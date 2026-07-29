@@ -661,3 +661,79 @@ export interface ExchangeRateCacheEntry {
   rate: number;
   fetchedAt: string;
 }
+
+// ==================================================================================
+// GENERAL LEDGER — Double-entry chart of accounts + journal entries
+// ==================================================================================
+
+export type LedgerAccountType = 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+
+export type TaxCategory =
+  | 'Advertising' | 'Contract Labor' | 'Office Expense' | 'Insurance'
+  | 'Legal & Professional Services' | 'Rent' | 'Supplies' | 'Taxes & Licenses'
+  | 'Travel' | 'Meals' | 'Utilities' | 'Other Expenses';
+
+export interface LedgerAccount {
+  id: string;
+  code: string;
+  name: string;
+  type: LedgerAccountType;
+  normalBalance: 'debit' | 'credit';
+  taxCategory?: string;
+  isActive: boolean;
+}
+
+export type JournalSource = 'manual' | 'expense' | 'payment' | 'payroll' | 'commission' | 'import' | 'opening_balance';
+
+export interface JournalLine {
+  accountId: string;
+  debit: number;
+  credit: number;
+  memo?: string;
+  entityId?: string;
+  currency: string;
+  exchangeRateToUSD: number;
+  amountUSD: number;
+  reconciled?: boolean;
+}
+
+export interface JournalEntry {
+  _id?: string;
+  date: string;
+  memo?: string;
+  source: JournalSource;
+  sourceId?: string;
+  lines: JournalLine[];
+  status: 'posted' | 'void';
+}
+
+export interface TrialBalanceRow {
+  accountId: string;
+  code: string;
+  name: string;
+  type: LedgerAccountType;
+  debit: number;
+  credit: number;
+}
+
+export interface PLReport {
+  totalIncome: number;
+  totalExpense: number;
+  netIncome: number;
+  byAccount: { code: string; name: string; type: LedgerAccountType; amount: number; taxCategory: string }[];
+}
+
+export interface BalanceSheetReport {
+  asOf: string;
+  totalAssets: number;
+  totalLiabilities: number;
+  totalEquity: number;
+  balanced: boolean;
+  byAccount: { code: string; name: string; type: LedgerAccountType; balance: number }[];
+}
+
+export interface NineninenineRow {
+  entityId: string;
+  totalUSD: number;
+  crossesThreshold: boolean;
+}
