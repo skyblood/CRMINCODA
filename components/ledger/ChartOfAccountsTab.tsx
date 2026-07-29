@@ -107,7 +107,7 @@ export function ChartOfAccountsTab() {
           </tr>
         </thead>
         <tbody>
-          {accounts.sort((a, b) => a.code.localeCompare(b.code)).map(account => (
+          {[...accounts].sort((a, b) => a.code.localeCompare(b.code)).map(account => (
             <tr key={account.id} className={`border-b border-gray-100 ${!account.isActive ? 'opacity-50' : ''}`}>
               <td className="py-2 pr-4 font-mono">{account.code}</td>
               <td className="py-2 pr-4">{account.name}</td>

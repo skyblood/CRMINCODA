@@ -37,9 +37,13 @@ export function JournalTab() {
 
   const accountsById = Object.fromEntries(accounts.map(a => [a.id, a]));
 
-  const totalDebit = draftLines.filter(l => l.side === 'debit').reduce((s, l) => s + (Number(l.amount) || 0), 0);
-  const totalCredit = draftLines.filter(l => l.side === 'credit').reduce((s, l) => s + (Number(l.amount) || 0), 0);
-  const isBalanced = draftLines.length >= 2 && Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0;
+  // Only count lines that would actually be included in the submitted payload
+  // (accountId set and amount > 0) — otherwise the UI can show "Balanceado"
+  // for a set of lines that differs from what handleSubmit actually POSTs.
+  const submittableLines = draftLines.filter(l => l.accountId && Number(l.amount) > 0);
+  const totalDebit = submittableLines.filter(l => l.side === 'debit').reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  const totalCredit = submittableLines.filter(l => l.side === 'credit').reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  const isBalanced = submittableLines.length >= 2 && Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0;
 
   const addLine = () => setDraftLines([...draftLines, { accountId: '', side: 'debit', amount: '' }]);
   const updateLine = (i: number, patch: Partial<DraftLine>) => {
@@ -54,8 +58,7 @@ export function JournalTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isBalanced) { setError('Los débitos deben ser iguales a los créditos.'); return; }
-    const lines: Partial<JournalLine>[] = draftLines
-      .filter(l => l.accountId && Number(l.amount) > 0)
+    const lines: Partial<JournalLine>[] = submittableLines
       .map(l => ({
         accountId: l.accountId,
         debit: l.side === 'debit' ? Number(l.amount) : 0,
