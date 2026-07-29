@@ -64,3 +64,64 @@ describe('POST /api/mercury-import', () => {
     assert.equal(res.body.unmatched.length, 0);
   });
 });
+
+describe('POST /api/mercury-import/confirm-match', () => {
+  it('confirms a match and sets reconciled: true on the correct line', async () => {
+    const entry = await JournalEntry.create({
+        date: new Date('2026-07-01'), source: 'expense',
+        lines: [
+            { accountId: 'coa_6300', debit: 500, amountUSD: 500 },
+            { accountId: 'coa_1000', credit: 500, amountUSD: 500 },
+        ],
+    });
+    const res = await request(app).post('/api/mercury-import/confirm-match')
+        .send({ journalEntryId: entry._id.toString(), lineIndex: 1 });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.lines[1].reconciled, true);
+
+    const reloaded = await JournalEntry.findById(entry._id);
+    assert.equal(reloaded.lines[1].reconciled, true);
+    assert.equal(reloaded.lines[0].reconciled, false);
+  });
+
+  it('rejects a NoSQL-operator-injection journalEntryId ($ne) without matching any document', async () => {
+    const entry = await JournalEntry.create({
+        date: new Date('2026-07-01'), source: 'expense',
+        lines: [
+            { accountId: 'coa_6300', debit: 500, amountUSD: 500 },
+            { accountId: 'coa_1000', credit: 500, amountUSD: 500 },
+        ],
+    });
+    const res = await request(app).post('/api/mercury-import/confirm-match')
+        .send({ journalEntryId: { $ne: null }, lineIndex: 1 });
+    assert.equal(res.status, 400);
+
+    const reloaded = await JournalEntry.findById(entry._id);
+    assert.equal(reloaded.lines[1].reconciled, false);
+  });
+
+  it('rejects a non-ObjectId journalEntryId string', async () => {
+    const res = await request(app).post('/api/mercury-import/confirm-match')
+        .send({ journalEntryId: 'not-a-valid-object-id', lineIndex: 0 });
+    assert.equal(res.status, 400);
+  });
+
+  it('rejects an out-of-range or non-numeric lineIndex without polluting Object.prototype', async () => {
+    const entry = await JournalEntry.create({
+        date: new Date('2026-07-01'), source: 'expense',
+        lines: [
+            { accountId: 'coa_6300', debit: 500, amountUSD: 500 },
+            { accountId: 'coa_1000', credit: 500, amountUSD: 500 },
+        ],
+    });
+    const id = entry._id.toString();
+
+    for (const lineIndex of [999, -1, '__proto__']) {
+        const res = await request(app).post('/api/mercury-import/confirm-match').send({ journalEntryId: id, lineIndex });
+        assert.equal(res.status, 404, `expected 404 for lineIndex=${JSON.stringify(lineIndex)}`);
+    }
+
+    assert.equal(({}).reconciled, undefined);
+    assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, 'reconciled'), false);
+  });
+});

@@ -65,8 +65,29 @@ router.post('/', async (req, res) => {
 router.post('/confirm-match', async (req, res) => {
     try {
         const { journalEntryId, lineIndex } = req.body;
+
+        // Reject anything that isn't a plain 24-hex-char ObjectId string before
+        // it ever reaches Mongoose — otherwise an object like {"$ne": null}
+        // survives Mongoose's condition-casting (it recognizes $-prefixed
+        // operator keys and passes them through) and matches an arbitrary
+        // document instead of 404ing. Same class of bug fixed in Task 8's
+        // journalEntries.js review.
+        if (typeof journalEntryId !== 'string' || !/^[0-9a-fA-F]{24}$/.test(journalEntryId)) {
+            return res.status(400).json({ error: 'Invalid journalEntryId' });
+        }
+
         const entry = await JournalEntry.findById(journalEntryId);
-        if (!entry || !entry.lines[lineIndex]) return res.status(404).json({ error: 'Journal entry line not found' });
+        if (!entry) return res.status(404).json({ error: 'Journal entry line not found' });
+
+        // entry.lines is array-like (Mongoose DocumentArray); a non-integer
+        // key such as "__proto__" resolves to the array's prototype object
+        // (truthy), bypassing an `!entry.lines[lineIndex]` guard and letting
+        // the assignment below pollute Object.prototype. Require a real,
+        // in-bounds array index instead of trusting the raw body value.
+        if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= entry.lines.length) {
+            return res.status(404).json({ error: 'Journal entry line not found' });
+        }
+
         entry.lines[lineIndex].reconciled = true;
         await entry.save();
         res.json(entry.toObject());
