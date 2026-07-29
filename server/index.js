@@ -55,6 +55,7 @@ import balanceSheetNotesRouter from './routes/balanceSheetNotes.js';
 import ledgerAccountsRouter from './routes/ledgerAccounts.js';
 import journalEntriesRouter from './routes/journalEntries.js';
 import ledgerReportsRouter from './routes/ledgerReports.js';
+import mercuryReconciliationRouter from './routes/mercuryReconciliation.js';
 import { ensureChartOfAccountsSeeded } from './seed/chartOfAccounts.js';
 import apiKeysRouter from './routes/apiKeys.js';
 import externalRouter from './routes/external.js';
@@ -245,6 +246,10 @@ app.use('/api/balanceSheetNotes', balanceSheetNotesRouter);
 app.use('/api/ledger-accounts', ledgerAccountsRouter);
 app.use('/api/journal-entries', journalEntriesRouter);
 app.use('/api/ledger-reports', ledgerReportsRouter);
+// Not added to readRoutes/dataRoutes tiers — falls back to the Tier 1 global
+// 300/15min limit, acceptable for an infrequent manual import action; note
+// this explicitly rather than leaving it silent.
+app.use('/api/mercury-import', mercuryReconciliationRouter);
 app.use('/api/apikeys', apiKeysRouter);
 app.use('/api/v1', externalRouter);
 app.use('/api/search', searchRouter);
