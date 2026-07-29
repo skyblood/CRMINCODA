@@ -29,4 +29,26 @@ describe('ensureChartOfAccountsSeeded', () => {
     const rent = await LedgerAccount.findOne({ code: '6600' }).lean();
     assert.equal(rent.name, 'Office Rent (renamed)');
   });
+
+  // Regression test: ensureChartOfAccountsSeeded() upserts via updateOne(),
+  // which does NOT trigger LedgerAccount's pre('validate') hook (only
+  // .save()/.create()/.insertMany() do). If normalBalance isn't set
+  // explicitly on each DEFAULT_CHART_OF_ACCOUNTS entry, every account
+  // seeded through the real startup path ends up with normalBalance
+  // unset — silently breaking the balance-sheet sign logic that branches
+  // on account.normalBalance === 'debit'.
+  it('sets a normalBalance matching each account\'s type when seeded via the real startup path', async () => {
+    await ensureChartOfAccountsSeeded();
+    const accounts = await LedgerAccount.find({}).lean();
+    assert.equal(accounts.length, 18);
+    const DEBIT_NORMAL_TYPES = new Set(['asset', 'expense']);
+    for (const account of accounts) {
+      const expected = DEBIT_NORMAL_TYPES.has(account.type) ? 'debit' : 'credit';
+      assert.equal(
+        account.normalBalance,
+        expected,
+        `account ${account.code} (${account.type}) expected normalBalance=${expected}, got ${account.normalBalance}`,
+      );
+    }
+  });
 });
