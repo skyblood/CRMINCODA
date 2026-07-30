@@ -15,6 +15,7 @@ export function CompanyExpensesTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: '', amount: 0, date: new Date().toISOString().split('T')[0], taxCategory: 'Office Expense' as TaxCategory, description: '' });
+  const [error, setError] = useState('');
 
   const fetchExpenses = useCallback(async () => {
     const res = await apiFetch('/api/transactions');
@@ -27,9 +28,16 @@ export function CompanyExpensesTab() {
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
+  const resetForm = () => {
+    setForm({ title: '', amount: 0, date: new Date().toISOString().split('T')[0], taxCategory: 'Office Expense', description: '' });
+    setShowForm(false);
+    setError('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await apiFetch('/api/transactions', {
+    setError('');
+    const res = await apiFetch('/api/transactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -47,8 +55,12 @@ export function CompanyExpensesTab() {
         description: form.description,
       }),
     });
-    setForm({ title: '', amount: 0, date: new Date().toISOString().split('T')[0], taxCategory: 'Office Expense', description: '' });
-    setShowForm(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
+      setError(body.error);
+      return;
+    }
+    resetForm();
     fetchExpenses();
   };
 
@@ -61,7 +73,7 @@ export function CompanyExpensesTab() {
           <h2 className="text-lg font-semibold text-gray-900">Gastos de la Empresa</h2>
           <p className="text-xs text-gray-500">Gastos generales no ligados a un proyecto o cliente (renta, seguros, suscripciones...). Para gastos de proyecto, usa Finance.</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-1 bg-purple-700 text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-purple-800">
+        <button onClick={() => { setError(''); setShowForm(true); }} className="flex items-center gap-1 bg-purple-700 text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-purple-800">
           <Plus size={16} /> Nuevo Gasto
         </button>
       </div>
@@ -90,9 +102,10 @@ export function CompanyExpensesTab() {
             <label className="block text-xs font-medium text-gray-700 mb-1">Descripción</label>
             <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2 text-sm" />
           </div>
+          {error && <div className="col-span-2 text-sm text-red-600">{error}</div>}
           <div className="col-span-2 flex gap-2">
             <button type="submit" className="bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg">Guardar</button>
-            <button type="button" onClick={() => setShowForm(false)} className="text-gray-500 text-sm px-3 py-2">Cancelar</button>
+            <button type="button" onClick={resetForm} className="text-gray-500 text-sm px-3 py-2">Cancelar</button>
           </div>
         </form>
       )}
