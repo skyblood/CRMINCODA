@@ -57,6 +57,7 @@ import journalEntriesRouter from './routes/journalEntries.js';
 import ledgerReportsRouter from './routes/ledgerReports.js';
 import mercuryReconciliationRouter from './routes/mercuryReconciliation.js';
 import { ensureChartOfAccountsSeeded } from './seed/chartOfAccounts.js';
+import { ensureFinancePermissionBackfilled } from './seed/userPermissions.js';
 import apiKeysRouter from './routes/apiKeys.js';
 import externalRouter from './routes/external.js';
 import searchRouter from './routes/search.js';
@@ -400,6 +401,7 @@ const KEY_PATH  = join(__dirname, 'cert-key.pem');
 const start = async () => {
     await connectDB();
     await ensureChartOfAccountsSeeded().catch(e => console.error('[startup] chart of accounts seed failed:', e.message));
+    await ensureFinancePermissionBackfilled().catch(e => console.error('[startup] finance permission backfill failed:', e.message));
     resumePendingRetries().catch(e => console.error('[startup] webhook resume failed:', e.message));
 
     const hasCerts = existsSync(CERT_PATH) && existsSync(KEY_PATH);

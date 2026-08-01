@@ -665,7 +665,7 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ projects, users,
         type: 'expense',
         category: newExpense.category,
         description: newExpense.description,
-        projectId: expenseLinkType === 'project' ? newExpense.projectId : undefined,
+        projectId: expenseLinkType === 'project' && newExpense.projectId ? newExpense.projectId : undefined,
         leadId: expenseLinkType === 'lead' ? newExpense.leadId : undefined,
         isBillable: expenseLinkType === 'project' ? newExpense.isBillable : false,
         consultantId: newExpense.category === 'credit_card' ? newExpense.consultantId || undefined : undefined
