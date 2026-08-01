@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import JournalEntry from '../models/JournalEntry.js';
+import LedgerAccount from '../models/LedgerAccount.js';
 import LedgerPeriodClose from '../models/LedgerPeriodClose.js';
 import { deepSanitize } from '../middleware/sanitize.js';
 import { emitCollectionChange } from '../socketInstance.js';
@@ -8,8 +9,33 @@ const router = Router();
 
 async function isPeriodClosed(date) {
     const d = new Date(date);
-    const closed = await LedgerPeriodClose.findOne({ year: d.getFullYear(), month: d.getMonth() + 1 }).lean();
+    // Use UTC getters, not local-time getters: journal entry dates are
+    // stored/compared as UTC, but getFullYear()/getMonth() read local-time
+    // components. In any negative-UTC-offset timezone (e.g. America/Bogota,
+    // UTC-5) a date stored as e.g. 2026-01-01T00:00:00.000Z reads back as
+    // December 31, 2025 in local time, which would match/miss the wrong
+    // period close record (see Task 17 review Fix 4).
+    const closed = await LedgerPeriodClose.findOne({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 }).lean();
     return !!closed;
+}
+
+/**
+ * Validates that every `lines[].accountId` in a manual journal entry
+ * references a real LedgerAccount. `accountId` is a bare, unvalidated
+ * string on JournalLineSchema with no schema-level reference check — without
+ * this, an entry with an unknown accountId either silently drops out of
+ * every report (data-entry mistake) or, in the malicious case, lets an
+ * attacker post an accountId like "__proto__" that later pollutes
+ * Object.prototype when reports aggregate it (see Task 17 review Fix 1).
+ * Returns an array of unknown account ids (empty if all are valid).
+ */
+async function findUnknownAccountIds(lines) {
+    if (!Array.isArray(lines)) return [];
+    const accountIds = [...new Set(lines.map((l) => l && l.accountId).filter(Boolean))];
+    if (!accountIds.length) return [];
+    const existing = await LedgerAccount.find({ id: { $in: accountIds } }).select('id').lean();
+    const existingIds = new Set(existing.map((a) => a.id));
+    return accountIds.filter((id) => !existingIds.has(id));
 }
 
 // ── GET ALL (filterable) ─────────────────────────────────────────────────────
@@ -47,6 +73,10 @@ router.post('/', async (req, res) => {
         }
         if (await isPeriodClosed(parsedDate)) {
             return res.status(409).json({ error: `Period ${payload.date} is closed. Reopen it before adding entries.` });
+        }
+        const unknownAccountIds = await findUnknownAccountIds(payload.lines);
+        if (unknownAccountIds.length) {
+            return res.status(400).json({ error: `Unknown account id(s): ${unknownAccountIds.join(', ')}` });
         }
         const doc = await JournalEntry.create({ ...payload, source: payload.source || 'manual' });
         const result = doc.toObject();

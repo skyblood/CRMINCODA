@@ -1,11 +1,12 @@
 // tests/ledger/journalEntriesRoute.test.ts
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
 import { setupTestDB, teardownTestDB, clearLedgerCollections, seedChartOfAccounts } from './setup.js';
 import journalEntriesRouter from '../../server/routes/journalEntries.js';
 import JournalEntry from '../../server/models/JournalEntry.js';
+import LedgerPeriodClose from '../../server/models/LedgerPeriodClose.js';
 
 function buildApp(role) {
   const a = express();
@@ -78,6 +79,70 @@ describe('POST /api/journal-entries', () => {
       ],
     });
     assert.equal(res.status, 400);
+  });
+
+  // Regression test for the Task 17 review Fix 1: `accountId` is a bare,
+  // unvalidated string on JournalLineSchema — without this check, an entry
+  // referencing a nonexistent account either silently drops out of every
+  // report, or (in the malicious case) lets an attacker post an accountId
+  // like "__proto__" that pollutes Object.prototype when reports aggregate it.
+  it('rejects an entry whose lines reference a nonexistent accountId with 400', async () => {
+    const res = await request(app).post('/api/journal-entries').send({
+      date: '2026-07-01', source: 'manual',
+      lines: [
+        { accountId: 'coa_does_not_exist', debit: 100, amountUSD: 100 },
+        { accountId: 'coa_3000', credit: 100, amountUSD: 100 },
+      ],
+    });
+    assert.equal(res.status, 400);
+    assert.match(res.body.error, /Unknown account id/i);
+    const count = await JournalEntry.countDocuments();
+    assert.equal(count, 0);
+  });
+
+  it('rejects a __proto__ accountId (prototype pollution attempt) with 400 and never persists it', async () => {
+    const res = await request(app).post('/api/journal-entries').send({
+      date: '2026-07-01', source: 'manual',
+      lines: [
+        { accountId: '__proto__', debit: 100, amountUSD: 100 },
+        { accountId: 'coa_3000', credit: 100, amountUSD: 100 },
+      ],
+    });
+    assert.equal(res.status, 400);
+    assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, 'debit'), false);
+  });
+});
+
+describe('isPeriodClosed date handling', () => {
+  // Regression test for the Task 17 review Fix 4: isPeriodClosed() used to
+  // read year/month with local-timezone getters (getFullYear/getMonth) on a
+  // UTC-stored date. In a negative-UTC-offset timezone (e.g. America/Bogota,
+  // UTC-5) a date stored as 2026-01-01T00:00:00.000Z reads back as December
+  // 31, 2025 locally, so the wrong period-close record would be queried.
+  // Rather than relying on the test host's own timezone (which may or may
+  // not reproduce the bug), this spies on LedgerPeriodClose.findOne and
+  // asserts the query it receives always reflects the UTC year/month of the
+  // entry's date, regardless of local TZ.
+  it('queries LedgerPeriodClose using the UTC year/month of the entry date, not local-timezone components', async () => {
+    let capturedQuery = null;
+    const findOneMock = mock.method(LedgerPeriodClose, 'findOne', (query) => {
+      capturedQuery = query;
+      return { lean: async () => null };
+    });
+    try {
+      await request(app).post('/api/journal-entries').send({
+        date: '2026-01-01T00:00:00.000Z', source: 'manual',
+        lines: [
+          { accountId: 'coa_1000', debit: 10, amountUSD: 10 },
+          { accountId: 'coa_3000', credit: 10, amountUSD: 10 },
+        ],
+      });
+    } finally {
+      findOneMock.mock.restore();
+    }
+    assert.ok(capturedQuery, 'LedgerPeriodClose.findOne was not called');
+    assert.equal(capturedQuery.year, 2026);
+    assert.equal(capturedQuery.month, 1);
   });
 });
 
