@@ -18,10 +18,22 @@ import User from '../models/User.js';
  * per-role opt-in path (UserManagement) that governs their other permission
  * flags, matching the existing convention that admins get `finance: true`
  * by default.
+ *
+ * Matches on `role: 'admin'` in addition to `permissions.admin: true`: a
+ * user can have `role: 'admin'` while `permissions.admin` is independently
+ * set to `false` (via UserManagement's per-permission toggle, which is
+ * decoupled from the role dropdown). auth.js's login/`/me` handlers force-grant
+ * full admin permissions (including `finance`) to any `role: 'admin'` user
+ * regardless of their stored `permissions.admin` value, so the backfill must
+ * use the same criterion or such a user would get admin treatment at login
+ * but never be picked up here (see Task 17 review Fix 5).
  */
 export async function ensureFinancePermissionBackfilled() {
     await User.updateMany(
-        { 'permissions.finance': { $exists: false }, 'permissions.admin': true },
+        {
+            'permissions.finance': { $exists: false },
+            $or: [{ 'permissions.admin': true }, { role: 'admin' }],
+        },
         { $set: { 'permissions.finance': true } },
     );
 }

@@ -67,4 +67,44 @@ describe('ensureFinancePermissionBackfilled', () => {
     const reloaded = await User.findOne({ id: 'u_explicit_false' });
     assert.equal(reloaded.permissions.finance, false);
   });
+
+  // Regression test for the Task 17 review Fix 5: a user can have
+  // `role: 'admin'` while `permissions.admin` is independently `false` (set
+  // via UserManagement's per-permission toggle, decoupled from the role
+  // dropdown). auth.js force-grants such a user full admin treatment
+  // (including `finance: true`) at login regardless of `permissions.admin`,
+  // so the backfill must match on `role: 'admin'` too — not just
+  // `permissions.admin: true` — or this user is never caught by it.
+  it('grants finance: true to a role:"admin" user whose permissions.admin is false and finance key is missing', async () => {
+    await User.create({
+      id: 'u_role_admin_perm_false',
+      name: 'Role Admin, Toggle Off',
+      email: 'roleadminpermfalse@test.com',
+      role: 'admin',
+      permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: false },
+    });
+
+    await ensureFinancePermissionBackfilled();
+
+    const reloaded = await User.findOne({ id: 'u_role_admin_perm_false' });
+    assert.equal(reloaded.permissions.finance, true);
+  });
+
+  // The same role:'admin' + permissions.admin:false combination, but with an
+  // *explicit* finance:false — must not be clobbered, matching the existing
+  // "doesn't clobber an explicit finance:false" convention above.
+  it('does not clobber an explicit permissions.finance:false on a role:"admin" user with permissions.admin:false', async () => {
+    await User.create({
+      id: 'u_role_admin_perm_false_explicit',
+      name: 'Role Admin, Toggle Off, Explicit Finance False',
+      email: 'roleadminpermfalseexplicit@test.com',
+      role: 'admin',
+      permissions: { dashboard: true, crm: true, projects: true, portal: true, admin: false, finance: false },
+    });
+
+    await ensureFinancePermissionBackfilled();
+
+    const reloaded = await User.findOne({ id: 'u_role_admin_perm_false_explicit' });
+    assert.equal(reloaded.permissions.finance, false);
+  });
 });

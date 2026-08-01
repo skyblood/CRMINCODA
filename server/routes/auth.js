@@ -48,7 +48,7 @@ router.post('/login', async (req, res) => {
 
         // Ensure permissions always has a valid structure (.lean() skips Mongoose defaults)
         if (!safeUser.permissions || typeof safeUser.permissions !== 'object') {
-            safeUser.permissions = { dashboard: false, crm: false, projects: false, portal: true, admin: false };
+            safeUser.permissions = { dashboard: false, crm: false, projects: false, portal: true, admin: false, finance: false };
         }
 
         // Admin role always gets full permissions regardless of what's stored in DB
@@ -59,6 +59,7 @@ router.post('/login', async (req, res) => {
                 dashboard: true,
                 crm: true,
                 projects: true,
+                finance: true,
             };
         }
 
@@ -84,10 +85,10 @@ router.get('/me', (req, res) => {
         user.canApproveCosting = user.role === 'admin';
     }
     if (!user.permissions || typeof user.permissions !== 'object') {
-        user.permissions = { dashboard: false, crm: false, projects: false, portal: true, admin: false };
+        user.permissions = { dashboard: false, crm: false, projects: false, portal: true, admin: false, finance: false };
     }
     if (user.role === 'admin') {
-        user.permissions = { ...user.permissions, admin: true, dashboard: true, crm: true, projects: true };
+        user.permissions = { ...user.permissions, admin: true, dashboard: true, crm: true, projects: true, finance: true };
     }
 
     res.json(user);
