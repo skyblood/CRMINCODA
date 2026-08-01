@@ -503,6 +503,15 @@ export interface Transaction {
   years?: number;       // License term in years
   licenseYear?: number; // Fiscal year this charge applies to (e.g. 2026)
   isPaid?: boolean;     // Whether the client has already paid
+
+  // Ledger fields (server/models/Transaction.js) — used by the Company
+  // Expenses tab (components/ledger/CompanyExpensesTab.tsx) to classify
+  // company-level (non-project) expenses for the general ledger / Schedule C.
+  taxCategory?: string;        // Schedule C category, e.g. "Office Expense"
+  amountUSD?: number;          // USD value of `amount`, for multi-currency ledger posting
+  currency?: string;           // Native currency of `amount` (defaults to USD)
+  exchangeRateToUSD?: number;  // Exchange rate applied to derive amountUSD
+  dateObj?: string;            // ISO date string when serialized over the wire
 }
 
 // ==================================================================================

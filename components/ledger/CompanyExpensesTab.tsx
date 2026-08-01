@@ -21,7 +21,7 @@ export function CompanyExpensesTab() {
     const res = await apiFetch('/api/transactions');
     if (res.ok) {
       const all: Transaction[] = await res.json();
-      setExpenses(all.filter(t => t.type === 'expense' && !t.projectId && !t.leadId && (t as any).taxCategory));
+      setExpenses(all.filter(t => t.type === 'expense' && !t.projectId && !t.leadId && t.taxCategory));
     }
     setLoading(false);
   }, []);
@@ -121,7 +121,7 @@ export function CompanyExpensesTab() {
             <tr key={exp.id} className="border-b border-gray-100">
               <td className="py-2 pr-4">{exp.date}</td>
               <td className="py-2 pr-4">{exp.title}</td>
-              <td className="py-2 pr-4">{(exp as any).taxCategory}</td>
+              <td className="py-2 pr-4">{exp.taxCategory}</td>
               <td className="py-2 pr-4">${exp.amount.toLocaleString()}</td>
             </tr>
           ))}
