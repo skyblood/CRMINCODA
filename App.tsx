@@ -61,6 +61,7 @@ const ProposalTemplateManager = React.lazy(() => import('./components/ProposalTe
 const EmailTemplateManager    = React.lazy(() => import('./components/EmailTemplateManager').then(m => ({ default: m.EmailTemplateManager })));
 const InvoiceManager          = React.lazy(() => import('./components/InvoiceManager').then(m => ({ default: m.InvoiceManager })));
 const FinancialBalanceReport  = React.lazy(() => import('./components/FinancialBalanceReport').then(m => ({ default: m.FinancialBalanceReport })));
+const Ledger                  = React.lazy(() => import('./components/Ledger').then(m => ({ default: m.Ledger })));
 
 // --- MOCK DATA CONSTANTS ---
 const CURRENT_YEAR = new Date().getFullYear();
@@ -348,6 +349,9 @@ const Sidebar: React.FC<{ restoreInputRef: React.RefObject<HTMLInputElement> }> 
                         <NavLink to="/templates" icon={ListPlus} label="Task Templates" />
                         <NavLink to="/skus" icon={Package} label="Products & SKUs" />
                     </div>
+                )}
+                {currentUser.permissions?.finance && (
+                    <NavLink to="/ledger" icon={DollarSign} label="Contabilidad" />
                 )}
             </nav>
             <div className="p-4 space-y-2" style={{ borderTop: '1px solid rgba(185,183,201,0.1)' }}>
@@ -698,6 +702,11 @@ const AppRoutes: React.FC = () => {
                 <Route path="/finance" element={
                     perm.admin
                         ? <ErrorBoundary moduleName="Finance Manager"><FinanceManager projects={projects} users={users} leads={leads} transactions={transactions} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={handleUpdateTransaction} onUpdateProject={handleUpdateProject} onUpdateUser={(u) => updateDocument('users', u.id, u)} /></ErrorBoundary>
+                        : <Navigate to="/" />
+                } />
+                <Route path="/ledger" element={
+                    perm.finance
+                        ? <ErrorBoundary moduleName="Ledger"><Ledger /></ErrorBoundary>
                         : <Navigate to="/" />
                 } />
                 <Route path="/profitability" element={

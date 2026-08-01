@@ -91,7 +91,7 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ projects, users,
   const [minHoursFilter, setMinHoursFilter] = useState<number>(0);
 
   // Expense Form State
-  const [expenseLinkType, setExpenseLinkType] = useState<'general' | 'project' | 'lead'>('general');
+  const [expenseLinkType, setExpenseLinkType] = useState<'project' | 'lead'>('project');
   const [newExpense, setNewExpense] = useState({
     title: '',
     amount: 0,
@@ -640,7 +640,7 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ projects, users,
              defaultDate = `${selectedYear}-${m}-01`;
         }
     }
-    setExpenseLinkType('general');
+    setExpenseLinkType('project');
     setNewExpense({
         title: '',
         amount: 0,
@@ -2096,15 +2096,8 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ projects, users,
                       <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Expense Context</label>
                           <div className="flex gap-2 mb-3">
-                              <button 
-                                type="button" 
-                                className={`flex-1 py-2 text-xs font-medium rounded-lg border transition ${expenseLinkType === 'general' ? 'bg-gray-100 text-gray-800 border-gray-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-                                onClick={() => setExpenseLinkType('general')}
-                              >
-                                  General
-                              </button>
-                              <button 
-                                type="button" 
+                              <button
+                                type="button"
                                 className={`flex-1 py-2 text-xs font-medium rounded-lg border transition ${expenseLinkType === 'project' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                                 onClick={() => setExpenseLinkType('project')}
                               >
