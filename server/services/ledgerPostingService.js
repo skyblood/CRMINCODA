@@ -23,7 +23,14 @@ function makeLine(accountId, amountNative, amountUSD, isDebit, opts = {}) {
 
 async function findExpenseAccount(tx) {
     if (tx.taxCategory) {
-        const byTax = await LedgerAccount.findOne({ type: 'expense', taxCategory: tx.taxCategory }).lean();
+        // Two seeded accounts intentionally share taxCategory: 'Office Expense'
+        // (6200 Office Expense, 6300 Software) — Schedule C has no dedicated
+        // "software" line item, so software costs are legitimately grouped
+        // under the official Office Expense line for tax-filing purposes.
+        // .sort({ code: 1 }) makes the tie deterministic (always 6200 first)
+        // instead of depending on MongoDB's unspecified default ordering
+        // (see Task 17 review Fix 6).
+        const byTax = await LedgerAccount.findOne({ type: 'expense', taxCategory: tx.taxCategory }).sort({ code: 1 }).lean();
         if (byTax) return byTax;
     }
     const code = CATEGORY_TO_ACCOUNT_CODE[tx.category] || CATEGORY_TO_ACCOUNT_CODE.other;

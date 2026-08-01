@@ -50,6 +50,26 @@ describe('postExpense', () => {
     assert.equal(count, 1);
   });
 
+  // Regression test for the Task 17 review Fix 6: two seeded accounts share
+  // taxCategory: 'Office Expense' (6200 Office Expense, 6300 Software) —
+  // Schedule C has no dedicated "software" line, so both legitimately map
+  // to the official Office Expense line for tax-filing purposes. Without a
+  // deterministic tiebreak, `LedgerAccount.findOne({ taxCategory })` could
+  // resolve to either account depending on MongoDB's unspecified default
+  // ordering. findExpenseAccount now sorts by code, always preferring 6200.
+  it('deterministically resolves taxCategory "Office Expense" to account 6200, not 6300, across repeated calls', async () => {
+    for (let i = 0; i < 5; i++) {
+      const entry = await postExpense({
+        id: `tx_office_${i}`, title: 'Office supplies', amount: 10, amountUSD: 10, currency: 'USD',
+        exchangeRateToUSD: 1, category: 'other', taxCategory: 'Office Expense', date: '2026-07-01',
+      });
+      const officeLine = entry.lines.find(l => l.accountId === 'coa_6200');
+      const softwareLine = entry.lines.find(l => l.accountId === 'coa_6300');
+      assert.ok(officeLine, `expected the expense to post to coa_6200 on iteration ${i}`);
+      assert.equal(softwareLine, undefined);
+    }
+  });
+
   it('throws when the chart of accounts has no matching account (caller must catch this)', async () => {
     await clearLedgerCollections(); // no chart of accounts seeded
     await assert.rejects(postExpense({
