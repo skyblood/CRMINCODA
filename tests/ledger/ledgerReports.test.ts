@@ -41,6 +41,32 @@ beforeEach(async () => {
     });
 });
 
+describe('sumByAccount prototype pollution defense (Task 17 review Fix 1)', () => {
+  // `line.accountId` is a bare, unvalidated string on JournalLineSchema — the
+  // journal-entries CREATE route now rejects unknown accountIds at the door
+  // (see journalEntriesRoute.test.ts), but this test proves the aggregation
+  // in ledgerReports.js is *also* hardened in depth: even if an entry with a
+  // "__proto__" accountId ends up in the DB (e.g. inserted directly, or via
+  // any future code path that bypasses the route), report aggregation must
+  // never write through the prototype chain.
+  it('does not pollute Object.prototype when an entry has a "__proto__" accountId', async () => {
+    await JournalEntry.create({
+      date: new Date('2026-07-10'), source: 'manual',
+      lines: [
+        { accountId: '__proto__', debit: 999, amountUSD: 999 },
+        { accountId: 'coa_1000', credit: 999, amountUSD: 999 },
+      ],
+    });
+
+    const res = await request(app).get('/api/ledger-reports/pl?start=2026-07-01&end=2026-07-31');
+    assert.equal(res.status, 200);
+
+    assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, 'debit'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, 'credit'), false);
+    assert.equal(({}).debit, undefined);
+  });
+});
+
 describe('GET /api/ledger-reports/trial-balance', () => {
   it('sums to zero (total debits = total credits) across all accounts', async () => {
     const res = await request(app).get('/api/ledger-reports/trial-balance');
@@ -71,6 +97,39 @@ describe('GET /api/ledger-reports/balance-sheet', () => {
     const res = await request(app).get('/api/ledger-reports/balance-sheet?asOf=2026-07-31');
     assert.equal(res.status, 200);
     assert.equal(res.body.totalAssets, 13800); // 10000 + 5000 - 1200 cash
+    assert.equal(res.body.balanced, true);
+  });
+});
+
+describe('date-only end/asOf boundary is inclusive of the full day (Task 17 review Fix 3)', () => {
+  // `new Date("2026-07-31")` parses to UTC midnight, so before the fix a
+  // same-day entry posted later that day (in any timezone at or behind UTC)
+  // was silently excluded by the `$lte` filter — the default "today" view of
+  // these reports omitted everything from today.
+  it('/pl includes an entry timestamped later on the same calendar day as `end`', async () => {
+    await JournalEntry.create({
+      date: new Date('2026-07-31T23:00:00.000Z'), source: 'expense',
+      lines: [
+        { accountId: 'coa_6300', debit: 50, amountUSD: 50 },
+        { accountId: 'coa_1000', credit: 50, amountUSD: 50 },
+      ],
+    });
+    const res = await request(app).get('/api/ledger-reports/pl?start=2026-07-01&end=2026-07-31');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.totalExpense, 1250); // 1200 seeded + 50 same-day-later
+  });
+
+  it('/balance-sheet includes an entry timestamped later on the same calendar day as `asOf`', async () => {
+    await JournalEntry.create({
+      date: new Date('2026-07-31T23:00:00.000Z'), source: 'expense',
+      lines: [
+        { accountId: 'coa_6300', debit: 50, amountUSD: 50 },
+        { accountId: 'coa_1000', credit: 50, amountUSD: 50 },
+      ],
+    });
+    const res = await request(app).get('/api/ledger-reports/balance-sheet?asOf=2026-07-31');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.totalAssets, 13750); // 13800 seeded - 50 same-day-later expense
     assert.equal(res.body.balanced, true);
   });
 });

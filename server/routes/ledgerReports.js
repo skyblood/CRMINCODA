@@ -4,9 +4,32 @@ import JournalEntry from '../models/JournalEntry.js';
 
 const router = Router();
 
+/**
+ * Normalizes a date-only string (e.g. "2026-08-01") to end-of-day UTC so it
+ * behaves as an inclusive upper bound in a `$lte` filter. `new Date(dateStr)`
+ * on a bare YYYY-MM-DD string parses to UTC midnight, which silently
+ * excludes any entry posted later that same day (in any timezone at or
+ * behind UTC) — the default "today" view of P&L/Balance Sheet would omit
+ * everything from today (see Task 17 review Fix 3). Strings that already
+ * carry a time component (full ISO datetimes) are respected as-is.
+ */
+function endOfDayUTC(dateStr) {
+    const d = new Date(dateStr);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr))) {
+        d.setUTCHours(23, 59, 59, 999);
+    }
+    return d;
+}
+
 /** Sums debit/credit (in USD) per account across a set of posted entries. */
 function sumByAccount(entries) {
-    const totals = {}; // accountId -> { debit, credit }
+    // Object.create(null) — not {} — because `line.accountId` is an
+    // unvalidated string sourced from client-controlled journal entry lines
+    // (see Task 17 review Fix 1). A plain {} accumulator lets an accountId of
+    // "__proto__" write through the prototype chain onto Object.prototype
+    // itself, polluting every object in the process for its lifetime. A
+    // prototype-less object has no inherited keys to collide with.
+    const totals = Object.create(null); // accountId -> { debit, credit }
     for (const entry of entries) {
         for (const line of entry.lines) {
             if (!totals[line.accountId]) totals[line.accountId] = { debit: 0, credit: 0 };
@@ -43,7 +66,7 @@ router.get('/pl', async (req, res) => {
         if (req.query.start || req.query.end) {
             filter.date = {};
             if (req.query.start) filter.date.$gte = new Date(req.query.start);
-            if (req.query.end) filter.date.$lte = new Date(req.query.end);
+            if (req.query.end) filter.date.$lte = endOfDayUTC(req.query.end);
         }
         const [accounts, entries] = await Promise.all([
             LedgerAccount.find({ type: { $in: ['income', 'expense'] } }).lean(),
@@ -72,7 +95,7 @@ router.get('/pl', async (req, res) => {
 // ── BALANCE SHEET ────────────────────────────────────────────────────────────
 router.get('/balance-sheet', async (req, res) => {
     try {
-        const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
+        const asOf = req.query.asOf ? endOfDayUTC(req.query.asOf) : new Date();
         // Fetch every account (not just asset/liability/equity): an as-of-date
         // balance sheet for a period that hasn't been formally closed must fold
         // current income/expense activity into equity as unrealized retained
