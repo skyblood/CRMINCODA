@@ -344,8 +344,11 @@ if (existsSync(distPath)) {
     app.get('*', (req, res) => {
         if (!req.path.startsWith('/api')) {
             res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-            res.sendFile(join(distPath, 'index.html'));
+            return res.sendFile(join(distPath, 'index.html'));
         }
+        // Any /api/* path that reached here matched no route above — respond
+        // with 404 instead of leaving the request hanging with no response.
+        res.status(404).json({ error: 'Not found' });
     });
 }
 
