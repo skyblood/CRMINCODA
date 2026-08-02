@@ -19,7 +19,7 @@ export async function computeOperations(_db, params) {
   const projects = await Project.find({}).lean();
   const users = await User.find({}).lean();
 
-  const consultantMap = {};
+  const consultantMap = Object.create(null);
   for (const u of users) {
     if (u.role === 'consultant' || u.hourlyCost > 0) {
       consultantMap[u.id] = {

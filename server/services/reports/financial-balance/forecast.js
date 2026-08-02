@@ -59,7 +59,7 @@ export async function computeForecast(_db, params) {
   const weeklyExpense = monthlyExpenseAvg / 4;
 
   // ── Client DSO map ─────────────────────────────────────────────────────
-  const clientDSO = {};
+  const clientDSO = Object.create(null);
   const dsoPipeline = await Payment.aggregate([
     { $unwind: '$appliedTo' },
     {

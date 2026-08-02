@@ -105,7 +105,7 @@ router.get('/profitability', async (req, res) => {
     const projects = await Project.find().lean();
     // Fetch all invoice payment totals per project in bulk
     const allInvoices = await Invoice.find({ deleted: { $ne: true } }).lean();
-    const invoicesByProject = {};
+    const invoicesByProject = Object.create(null);
     for (const inv of allInvoices) {
       if (inv.projectId) {
         if (!invoicesByProject[inv.projectId]) invoicesByProject[inv.projectId] = [];

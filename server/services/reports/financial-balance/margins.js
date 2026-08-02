@@ -126,7 +126,7 @@ export async function computeMargins(_db, params) {
   })).sort((a, b) => b.revenue - a.revenue);
 
   // ── By Top Clients ─────────────────────────────────────────────────────
-  const clientMap = {};
+  const clientMap = Object.create(null);
   for (const p of projectData) {
     const key = p.clientName;
     if (!clientMap[key]) {
