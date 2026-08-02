@@ -98,6 +98,7 @@ describe('Payment posting hook', () => {
 describe('Commission posting hook', () => {
   it('posts a journal entry when status transitions to paid via findOneAndUpdate', async () => {
     const commission = await Commission.create({
+      id: 'commission-1',
       projectId: 'proj-1', projectName: 'IMPL: ACME', clientId: 'ACME', clientName: 'ACME',
       rate: 10, revenueUSD: 20000, costUSD: 8900, netUtilityUSD: 11100, amountUSD: 1110,
       split: { bmRetainedUSD: 400, fabianShareUSD: 355, spencerShareUSD: 355 },
@@ -115,6 +116,7 @@ describe('Commission posting hook', () => {
 
   it('does not post when the update does not set status to paid', async () => {
     const commission = await Commission.create({
+      id: 'commission-2',
       projectId: 'proj-2', projectName: 'HOURS: Beta', clientId: 'Beta', clientName: 'Beta',
       rate: 15, revenueUSD: 10000, costUSD: 3000, netUtilityUSD: 7000, amountUSD: 1050,
       split: { bmRetainedUSD: 380, fabianShareUSD: 335, spencerShareUSD: 335 },

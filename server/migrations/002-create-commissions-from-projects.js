@@ -18,6 +18,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { nanoid } from 'nanoid';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,6 +127,7 @@ async function migrate() {
 
     try {
       await Commission.create({
+        id: nanoid(),
         projectId: project.id,
         projectName: project.name,
         clientId: lead?.clientId || lead?.companyName || project.clientName,

@@ -151,7 +151,7 @@ router.get('/1099', async (req, res) => {
             'lines.accountId': laborAccount.id,
         }).lean();
 
-        const totals = {}; // entityId -> totalUSD
+        const totals = Object.create(null); // entityId -> totalUSD
         for (const entry of entries) {
             for (const line of entry.lines) {
                 if (line.accountId !== laborAccount.id || !line.entityId || line.debit <= 0) continue;

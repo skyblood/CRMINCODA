@@ -30,6 +30,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { setIo } from './socketInstance.js';
+import { randomBytes } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -58,6 +59,7 @@ import ledgerReportsRouter from './routes/ledgerReports.js';
 import mercuryReconciliationRouter from './routes/mercuryReconciliation.js';
 import { ensureChartOfAccountsSeeded } from './seed/chartOfAccounts.js';
 import { ensureFinancePermissionBackfilled } from './seed/userPermissions.js';
+import { ensureCommissionIdsBackfilled } from './seed/commissionIds.js';
 import apiKeysRouter from './routes/apiKeys.js';
 import externalRouter from './routes/external.js';
 import searchRouter from './routes/search.js';
@@ -200,7 +202,7 @@ if (IS_PROD && !process.env.SESSION_SECRET) {
 
 const SESSION_MAX_AGE = 8 * 60 * 60 * 1000; // 8 horas
 app.use(session({
-    secret: process.env.SESSION_SECRET || require('crypto').randomBytes(32).toString('hex'),
+    secret: process.env.SESSION_SECRET || randomBytes(32).toString('hex'),
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
@@ -402,6 +404,7 @@ const start = async () => {
     await connectDB();
     await ensureChartOfAccountsSeeded().catch(e => console.error('[startup] chart of accounts seed failed:', e.message));
     await ensureFinancePermissionBackfilled().catch(e => console.error('[startup] finance permission backfill failed:', e.message));
+    await ensureCommissionIdsBackfilled().catch(e => console.error('[startup] commission id backfill failed:', e.message));
     resumePendingRetries().catch(e => console.error('[startup] webhook resume failed:', e.message));
 
     const hasCerts = existsSync(CERT_PATH) && existsSync(KEY_PATH);

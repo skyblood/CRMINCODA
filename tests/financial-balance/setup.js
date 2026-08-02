@@ -168,12 +168,14 @@ export async function seedTestData() {
   // ── Commissions ──────────────────────────────────────────────────────
   await Commission.create([
     {
+      id: 'commission-acme',
       projectId: 'proj-acme', projectName: 'IMPL: ACME', clientId: 'ACME Corp', clientName: 'ACME Corp',
       rate: 10, revenueUSD: 20000, costUSD: 8900, netUtilityUSD: 11100, amountUSD: 1110,
       split: { bmRetainedUSD: 3996, fabianShareUSD: 2997, spencerShareUSD: 2997 },
       status: 'approved', paidAmountUSD: 0,
     },
     {
+      id: 'commission-beta',
       projectId: 'proj-beta', projectName: 'HOURS: Beta', clientId: 'Beta Inc', clientName: 'Beta Inc',
       rate: 15, revenueUSD: 10000, costUSD: 3000, netUtilityUSD: 7000, amountUSD: 1050,
       split: { bmRetainedUSD: 2380, fabianShareUSD: 1785, spencerShareUSD: 1785 },

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { postCommissionPaid } from '../services/ledgerPostingService.js';
 
 const CommissionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
   projectId: { type: String, required: true },
   projectName: { type: String, required: true },
   clientId: { type: String, index: true },
