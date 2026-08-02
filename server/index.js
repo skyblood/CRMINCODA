@@ -92,6 +92,13 @@ import aiReportsRouter from './routes/aiReports.js';
 import backupRouter from './routes/backup.js';
 
 const app = express();
+// Behind Cloudflare Tunnel in production: exactly one reverse-proxy hop
+// (cloudflared -> this app), so trust only that immediate hop's
+// X-Forwarded-For rather than the whole chain. Without this,
+// express-rate-limit rejects every request with ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+// since it refuses to trust a forwarded-for header when Express's own
+// trust proxy setting is the (insecure-by-default) false.
+app.set('trust proxy', 1);
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 
