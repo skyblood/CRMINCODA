@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import { requireAdmin } from '../middleware/requireAuth.js';
 import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
 import User from '../models/User.js';
@@ -42,7 +43,7 @@ const prepareUsers = async (users) => {
 const router = Router();
 
 // POST /api/seed - Reset DB with provided data
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
     try {
         const {
             users, leads, projects, templates, skus, transactions, contacts, goals,
@@ -148,7 +149,7 @@ router.post('/init', async (req, res) => {
 });
 
 // POST /api/seed/sync-templates - Upsert templates by id (insert new, skip existing)
-router.post('/sync-templates', async (req, res) => {
+router.post('/sync-templates', requireAdmin, async (req, res) => {
     try {
         const { templates } = req.body;
         if (!Array.isArray(templates) || templates.length === 0) {

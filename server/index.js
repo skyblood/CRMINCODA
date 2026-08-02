@@ -24,6 +24,7 @@ import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import { sanitizeBody, sanitizeQuery, sanitizeParams } from './middleware/sanitize.js';
+import { requireAuth } from './middleware/requireAuth.js';
 import cron from 'node-cron';
 // Lazy-loaded if system MongoDB fails (see connectDB function)
 import { fileURLToPath } from 'url';
@@ -234,6 +235,7 @@ app.use(sanitizeQuery);
 app.use(sanitizeParams);
 
 // ==================== API ROUTES ====================
+app.use(requireAuth);
 app.use('/api/leads', fieldFilter('leads'), leadsRouter);
 app.use('/api/projects', fieldFilter('projects'), projectsRouter);
 app.use('/api/users', fieldFilter('users'), usersRouter);
