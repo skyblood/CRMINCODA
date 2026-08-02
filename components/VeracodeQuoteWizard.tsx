@@ -557,10 +557,11 @@ export function VeracodeQuoteWizard({ lead, existingConfig, onGenerate, onClose 
                         href={(() => {
                           try {
                             const sanitized = sanitizeHttpsUrl(driveUrl);
-                            if (!sanitized.startsWith('https://drive.google.com/')) {
+                            const parsed = new URL(sanitized);
+                            if (parsed.protocol !== 'https:' || parsed.hostname !== 'drive.google.com') {
                               return '#';
                             }
-                            return sanitized;
+                            return parsed.toString();
                           } catch {
                             return '#';
                           }

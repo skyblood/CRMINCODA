@@ -37,6 +37,14 @@ const API_PATH_RE = /^\/api[a-zA-Z0-9\-._~:/?#@!$&'()*+,;=%]{0,4096}$/;
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const s = String(path ?? '');
   if (!API_PATH_RE.test(s)) throw new Error('apiFetch: path blocked');
-  // Prepend explicit origin so the resolved URL is structurally same-origin (prevents SSRF).
-  return fetch(window.location.origin + s, { credentials: 'include', ...init });
+  // Resolve against the current origin, then verify the *parsed* result — not
+  // just the raw string — actually lands on this same origin before ever
+  // reaching fetch(). This closes the SSRF class the regex above cannot rule
+  // out on its own (a value that passes the character-class check could
+  // still be interpreted as a different authority once parsed as a URL).
+  const url = new URL(s, window.location.origin);
+  if (url.origin !== window.location.origin) {
+    throw new Error('apiFetch: cross-origin request blocked');
+  }
+  return fetch(url, { credentials: 'include', ...init });
 }
