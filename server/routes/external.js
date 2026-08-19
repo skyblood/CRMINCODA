@@ -14,6 +14,8 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import LedgerAccount from '../models/LedgerAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
+import Payment from '../models/Payment.js';
+import Invoice from '../models/Invoice.js';
 import { apiKeyAuth, requireScope } from '../middleware/apiKeyAuth.js';
 import { validateExternalQuery } from '../middleware/sanitize.js';
 import { dispatchWebhooks } from '../webhookService.js';
@@ -208,6 +210,66 @@ router.get('/financials/summary', requireScope('financials'), async (req, res) =
             totalLiabilities,
             totalEquity,
             balanced: Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01,
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── CASH & COLLECTIONS ─────────────────────────────────────────────────────
+// GET /api/v1/cash/summary — cash-in (12m), AR aging, DSO, top debtors
+router.get('/cash/summary', requireScope('cash'), async (req, res) => {
+    try {
+        const now = new Date();
+        const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+        const [cashInResult, openInvoices, topDebtors, arResult, revenueResult] = await Promise.all([
+            Payment.aggregate([
+                { $match: { paymentDate: { $gte: twelveMonthsAgo } } },
+                { $group: { _id: null, totalUSD: { $sum: '$amountUSD' }, count: { $sum: 1 } } },
+            ]),
+            Invoice.find({ status: { $in: ['issued', 'partially_paid', 'overdue'] }, deleted: { $ne: true } }).lean(),
+            Invoice.aggregate([
+                { $match: { status: { $in: ['issued', 'partially_paid', 'overdue'] }, deleted: { $ne: true } } },
+                { $group: { _id: '$clientId', clientName: { $first: '$clientName' }, totalOwedUSD: { $sum: '$balanceUSD' } } },
+                { $sort: { totalOwedUSD: -1 } },
+                { $limit: 5 },
+            ]),
+            Invoice.aggregate([
+                { $match: { status: { $in: ['issued', 'partially_paid', 'overdue'] }, deleted: { $ne: true } } },
+                { $group: { _id: null, totalAR: { $sum: '$balanceUSD' } } },
+            ]),
+            Invoice.aggregate([
+                { $match: { status: { $ne: 'void' }, deleted: { $ne: true }, issueDate: { $gte: twelveMonthsAgo } } },
+                { $group: { _id: null, totalRevenue: { $sum: '$totalUSD' } } },
+            ]),
+        ]);
+
+        const buckets = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
+        for (const inv of openInvoices) {
+            const dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
+            const daysOverdue = dueDate ? Math.floor((now - dueDate) / 86400000) : 0;
+            const balance = inv.balanceUSD || 0;
+            let bucket;
+            if (daysOverdue <= 0) bucket = 'current';
+            else if (daysOverdue <= 30) bucket = '1-30';
+            else if (daysOverdue <= 60) bucket = '31-60';
+            else if (daysOverdue <= 90) bucket = '61-90';
+            else bucket = '90+';
+            buckets[bucket] += balance;
+        }
+
+        const totalAR = arResult[0]?.totalAR || 0;
+        const totalRevenue = revenueResult[0]?.totalRevenue || 0;
+        const globalDSO = totalRevenue > 0 ? Math.round((totalAR / totalRevenue) * 365) : 0;
+
+        res.json({
+            cashInLast12m: cashInResult[0]?.totalUSD || 0,
+            paymentsCountLast12m: cashInResult[0]?.count || 0,
+            totalAR,
+            arAgingBuckets: buckets,
+            globalDSO,
+            topDebtors: topDebtors.map(d => ({ clientName: d.clientName, totalOwedUSD: d.totalOwedUSD })),
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
