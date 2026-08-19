@@ -155,5 +155,7 @@ según el historial de git de este repo) nunca fue alcanzada desde ninguna sesi�
 construyó esta feature. En consecuencia, `POST /api/v1/leads`, los 6 endpoints GET
 nuevos y las tools MCP correspondientes están inertes en producción hasta que ambas
 migraciones se corran ahí manualmente con credenciales de producción. La migración 004
-ahora requiere pasar la API key en texto plano como argumento de línea de comandos (ver
-`server/migrations/004-add-board-scopes-to-api-keys.js`).
+ahora está limitada a una sola API key (identificada por hash, no por texto plano) y la
+recibe vía la variable de entorno `API_KEY_TO_GRANT` o un prompt interactivo — nunca
+como argumento de línea de comandos, ya que eso quedaría visible en `ps aux` y en el
+historial de la shell (ver `server/migrations/004-add-board-scopes-to-api-keys.js`).
