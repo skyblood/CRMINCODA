@@ -31,13 +31,13 @@ describe('GET /api/v1/commissions/summary', () => {
             {
                 id: 'c1', projectId: 'p1', projectName: 'Proj A', clientId: 'cl1', clientName: 'Acme',
                 rate: 10, revenueUSD: 100000, costUSD: 40000, netUtilityUSD: 60000, amountUSD: 6000,
-                split: { bmRetainedUSD: 2400, fabianShareUSD: 1800, spencerShareUSD: 1800 },
+                split: { bmRetainedUSD: 2400, fabianShareUSD: 1800, spencerShareUSD: 1700 },
                 status: 'paid',
             },
             {
                 id: 'c2', projectId: 'p2', projectName: 'Proj B', clientId: 'cl2', clientName: 'Beta',
                 rate: 10, revenueUSD: 50000, costUSD: 20000, netUtilityUSD: 30000, amountUSD: 3000,
-                split: { bmRetainedUSD: 1200, fabianShareUSD: 900, spencerShareUSD: 900 },
+                split: { bmRetainedUSD: 1200, fabianShareUSD: 900, spencerShareUSD: 800 },
                 status: 'pending',
             },
         ]);
@@ -50,6 +50,7 @@ describe('GET /api/v1/commissions/summary', () => {
         assert.equal(res.body.totalAmountUSD, 9000);
         assert.equal(res.body.byPerson.bmRetainedUSD, 3600);
         assert.equal(res.body.byPerson.fabianShareUSD, 2700);
+        assert.equal(res.body.byPerson.spencerShareUSD, 2500);
         assert.equal(res.body.byStatus.paid, 6000);
         assert.equal(res.body.byStatus.pending, 3000);
     });
