@@ -12,6 +12,8 @@ import Project from '../models/Project.js';
 import Contact from '../models/Contact.js';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
+import LedgerAccount from '../models/LedgerAccount.js';
+import JournalEntry from '../models/JournalEntry.js';
 import { apiKeyAuth, requireScope } from '../middleware/apiKeyAuth.js';
 import { validateExternalQuery } from '../middleware/sanitize.js';
 import { dispatchWebhooks } from '../webhookService.js';
@@ -160,6 +162,53 @@ router.get('/pipeline-forecast', requireScope('pipeline'), async (req, res) => {
     try {
         const forecast = await computePipelineForecast(ai);
         res.json(forecast);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── FINANCIALS ─────────────────────────────────────────────────────────────
+// GET /api/v1/financials/summary — condensed P&L + Balance Sheet, as of now
+router.get('/financials/summary', requireScope('financials'), async (req, res) => {
+    try {
+        const [accounts, entries] = await Promise.all([
+            LedgerAccount.find().lean(),
+            JournalEntry.find({ status: 'posted' }).lean(),
+        ]);
+        const accountsById = Object.fromEntries(accounts.map(a => [a.id, a]));
+
+        const totals = Object.create(null);
+        for (const entry of entries) {
+            for (const line of entry.lines) {
+                if (!totals[line.accountId]) totals[line.accountId] = { debit: 0, credit: 0 };
+                totals[line.accountId].debit += line.debit > 0 ? line.amountUSD : 0;
+                totals[line.accountId].credit += line.credit > 0 ? line.amountUSD : 0;
+            }
+        }
+
+        let totalIncome = 0, totalExpense = 0;
+        let totalAssets = 0, totalLiabilities = 0, totalEquity = 0;
+        for (const [accountId, t] of Object.entries(totals)) {
+            const account = accountsById[accountId];
+            if (!account) continue;
+            const balance = account.normalBalance === 'debit' ? (t.debit - t.credit) : (t.credit - t.debit);
+            if (account.type === 'income') { totalIncome += balance; totalEquity += balance; }
+            else if (account.type === 'expense') { totalExpense += balance; totalEquity -= balance; }
+            else if (account.type === 'asset') totalAssets += balance;
+            else if (account.type === 'liability') totalLiabilities += balance;
+            else if (account.type === 'equity') totalEquity += balance;
+        }
+
+        res.json({
+            asOf: new Date(),
+            netIncome: totalIncome - totalExpense,
+            totalIncome,
+            totalExpense,
+            totalAssets,
+            totalLiabilities,
+            totalEquity,
+            balanced: Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01,
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
