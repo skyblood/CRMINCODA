@@ -23,6 +23,6 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["."],
-  "exclude": ["vite.config.ts", "tests/ledger"],
+  "exclude": ["vite.config.ts", "tests/ledger", "tests/board-reports", "tests/ai-reports"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
