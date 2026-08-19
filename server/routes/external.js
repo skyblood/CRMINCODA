@@ -53,19 +53,48 @@ router.get('/leads/:id', requireScope('leads'), async (req, res) => {
 });
 
 // POST /api/v1/leads — create a new opportunity
-router.post('/leads', requireScope('leads'), async (req, res) => {
+// Field whitelist: the Lead model is `strict: false` (unknown fields pass
+// straight through to Mongo), so an unfiltered `...body` spread lets any
+// caller with the `leads` scope set arbitrary document fields (internal
+// scoring, assignment, suppression flags, or fields outside the schema
+// entirely). Only these fields are ever caller-controlled; `id` is always
+// server-generated so a caller can't pick a colliding/predictable one.
+const LEAD_WRITABLE_FIELDS = ['companyName', 'contactName', 'email', 'phone', 'value', 'stage', 'description', 'manufacturer', 'country', 'partnerName', 'projectName'];
+const LEAD_VALID_STAGES = ['prospect', 'qualification', 'presentation', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
+
+router.post('/leads', requireScope('leads'), requireScope('leads:write'), async (req, res) => {
     try {
         const body = req.body || {};
-        if (!body.companyName || !body.contactName) {
-            return res.status(400).json({ error: 'companyName and contactName are required.' });
+
+        if (typeof body.companyName !== 'string' || !body.companyName.trim() || body.companyName.length > 200) {
+            return res.status(400).json({ error: 'companyName is required and must be a non-empty string (max 200 chars).' });
+        }
+        if (typeof body.contactName !== 'string' || !body.contactName.trim() || body.contactName.length > 200) {
+            return res.status(400).json({ error: 'contactName is required and must be a non-empty string (max 200 chars).' });
+        }
+        if (body.stage !== undefined && !LEAD_VALID_STAGES.includes(body.stage)) {
+            return res.status(400).json({ error: `stage must be one of: ${LEAD_VALID_STAGES.join(', ')}` });
+        }
+        if (body.value !== undefined && (typeof body.value !== 'number' || !Number.isFinite(body.value) || body.value < 0)) {
+            return res.status(400).json({ error: 'value must be a non-negative number.' });
+        }
+        for (const field of ['email', 'phone', 'description', 'manufacturer', 'country', 'partnerName', 'projectName']) {
+            if (body[field] !== undefined && (typeof body[field] !== 'string' || body[field].length > 500)) {
+                return res.status(400).json({ error: `${field} must be a string (max 500 chars).` });
+            }
         }
 
-        const stage = body.stage || 'prospect';
+        const safeInput = {};
+        for (const field of LEAD_WRITABLE_FIELDS) {
+            if (body[field] !== undefined) safeInput[field] = body[field];
+        }
+
+        const stage = safeInput.stage || 'prospect';
         const doc = await Lead.create({
-            ...body,
-            id: body.id || `lead_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+            ...safeInput,
+            id: `lead_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
             stage,
-            value: body.value || 0,
+            value: safeInput.value || 0,
             stageHistory: [{
                 stage,
                 enteredAt: new Date().toISOString(),
