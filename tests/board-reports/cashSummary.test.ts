@@ -49,6 +49,7 @@ describe('GET /api/v1/cash/summary', () => {
         assert.equal(res.body.paymentsCountLast12m, 1);
         assert.equal(res.body.totalAR, 3000);
         assert.equal(res.body.arAgingBuckets['31-60'], 3000);
+        assert.equal(res.body.globalDSO, 365);
         assert.equal(res.body.topDebtors.length, 1);
         assert.equal(res.body.topDebtors[0].clientName, 'Acme');
     });
