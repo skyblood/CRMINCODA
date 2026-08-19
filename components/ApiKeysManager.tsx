@@ -13,7 +13,7 @@ interface ApiKey {
   createdBy?: string;
 }
 
-const ALL_SCOPES = ['leads', 'pipeline', 'projects', 'contacts', 'users', 'transactions'];
+const ALL_SCOPES = ['leads', 'pipeline', 'projects', 'contacts', 'users', 'transactions', 'financials', 'cash', 'goals', 'commissions', 'leads:write'];
 
 const SCOPE_LABELS: Record<string, string> = {
   leads: 'Leads',
@@ -22,6 +22,11 @@ const SCOPE_LABELS: Record<string, string> = {
   contacts: 'Contacts',
   users: 'Users',
   transactions: 'Transactions',
+  financials: 'Financials',
+  cash: 'Cash',
+  goals: 'Goals',
+  commissions: 'Commissions',
+  'leads:write': 'Leads (write)',
 };
 
 export const ApiKeysManager: React.FC = () => {
@@ -239,12 +244,19 @@ export const ApiKeysManager: React.FC = () => {
             ['GET', '/api/v1/', 'Discovery — lista endpoints disponibles'],
             ['GET', '/api/v1/leads', 'Todos los leads activos [?stage= &manufacturer=]'],
             ['GET', '/api/v1/leads/:id', 'Lead por ID'],
+            ['POST', '/api/v1/leads', 'Crear lead (requiere scope leads:write)'],
             ['GET', '/api/v1/pipeline', 'Resumen del pipeline (conteos y valores por etapa)'],
+            ['GET', '/api/v1/pipeline-forecast', 'Forecast del pipeline por etapa'],
             ['GET', '/api/v1/projects', 'Proyectos [?status= &type=]'],
             ['GET', '/api/v1/projects/:id', 'Proyecto completo con tickets y logs'],
             ['GET', '/api/v1/contacts', 'Contactos'],
             ['GET', '/api/v1/users', 'Usuarios (sin contraseñas)'],
             ['GET', '/api/v1/transactions', 'Transacciones'],
+            ['GET', '/api/v1/financials/summary', 'Resumen financiero (P&L)'],
+            ['GET', '/api/v1/cash/summary', 'Posición de caja'],
+            ['GET', '/api/v1/cash/mercury-status', 'Estado de la cuenta Mercury'],
+            ['GET', '/api/v1/goals', 'Metas de ingresos'],
+            ['GET', '/api/v1/commissions/summary', 'Resumen de comisiones'],
           ].map(([method, path, desc]) => (
             <div key={path} className="flex items-start gap-2 text-xs">
               <span className="font-mono font-bold text-purple-600 shrink-0">{method}</span>
