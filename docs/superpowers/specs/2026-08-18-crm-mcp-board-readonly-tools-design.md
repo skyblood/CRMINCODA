@@ -145,3 +145,15 @@ Seguir la convención existente de `pnpm test` (`node --test` sobre `tests/*.tes
 Si ya existen tests de `external.js` (a confirmar en el plan de implementación), usarlos
 como plantilla para los 6 endpoints nuevos: request con key válido/scope correcto →
 200 + forma esperada; key sin el scope → 403; sin key → 401.
+
+## Estado de despliegue (post-implementación)
+
+Las migraciones 004 y 005 sólo se han corrido contra el Mongo local de desarrollo
+(`mongodb://127.0.0.1:27017/crm_incoda`, que tiene 0 documentos `ApiKey`). La base de
+datos de producción real (desplegada vía Docker + Cloudflare Tunnel a `crm.incoda.biz`,
+según el historial de git de este repo) nunca fue alcanzada desde ninguna sesión que
+construyó esta feature. En consecuencia, `POST /api/v1/leads`, los 6 endpoints GET
+nuevos y las tools MCP correspondientes están inertes en producción hasta que ambas
+migraciones se corran ahí manualmente con credenciales de producción. La migración 004
+ahora requiere pasar la API key en texto plano como argumento de línea de comandos (ver
+`server/migrations/004-add-board-scopes-to-api-keys.js`).
