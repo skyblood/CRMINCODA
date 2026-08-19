@@ -38,6 +38,8 @@ describe('GET /api/v1/financials/summary', () => {
             { id: 'cash', code: '1000', name: 'Cash', type: 'asset' },
             { id: 'income', code: '4000', name: 'Service Income', type: 'income' },
             { id: 'expense', code: '6000', name: 'Software', type: 'expense' },
+            { id: 'payable', code: '2000', name: 'Accounts Payable', type: 'liability' },
+            { id: 'equity', code: '3000', name: 'Retained Earnings', type: 'equity' },
         ]);
         await JournalEntry.create([
             {
@@ -54,13 +56,29 @@ describe('GET /api/v1/financials/summary', () => {
                     { accountId: 'expense', debit: 200, amountUSD: 200 },
                 ],
             },
+            {
+                date: new Date(), source: 'payment', status: 'posted',
+                lines: [
+                    { accountId: 'cash', debit: 500, amountUSD: 500 },
+                    { accountId: 'payable', credit: 500, amountUSD: 500 },
+                ],
+            },
+            {
+                date: new Date(), source: 'payment', status: 'posted',
+                lines: [
+                    { accountId: 'cash', debit: 200, amountUSD: 200 },
+                    { accountId: 'equity', credit: 200, amountUSD: 200 },
+                ],
+            },
         ]);
         const res = await request(app).get('/api/v1/financials/summary').set('Authorization', `Bearer ${key}`);
         assert.equal(res.status, 200);
         assert.equal(res.body.totalIncome, 1000);
         assert.equal(res.body.totalExpense, 200);
         assert.equal(res.body.netIncome, 800);
-        assert.equal(res.body.totalAssets, 800); // cash: +1000 debit, -200 credit
-        assert.equal(res.body.balanced, true);
+        assert.equal(res.body.totalAssets, 1500); // cash: 1700 debit - 200 credit
+        assert.equal(res.body.totalLiabilities, 500); // payable: 500 credit
+        assert.equal(res.body.totalEquity, 1000); // P&L: 800 + direct equity: 200
+        assert.equal(res.body.balanced, true); // 1500 = 500 + 1000
     });
 });
