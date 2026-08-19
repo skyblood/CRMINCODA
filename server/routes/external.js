@@ -17,6 +17,7 @@ import { validateExternalQuery } from '../middleware/sanitize.js';
 import { dispatchWebhooks } from '../webhookService.js';
 import { emitCollectionChange } from '../socketInstance.js';
 import { logAudit } from '../auditService.js';
+import { getClient as getAiClient, computePipelineForecast } from './aiReports.js';
 
 const router = Router();
 
@@ -117,6 +118,19 @@ router.get('/pipeline', requireScope('pipeline'), async (req, res) => {
             lostCount: lostLeads.length,
             byStage: stages,
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/v1/pipeline-forecast — AI-generated 30/60/90-day revenue forecast
+router.get('/pipeline-forecast', requireScope('pipeline'), async (req, res) => {
+    const ai = getAiClient();
+    if (!ai) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' });
+
+    try {
+        const forecast = await computePipelineForecast(ai);
+        res.json(forecast);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
