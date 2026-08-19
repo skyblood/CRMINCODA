@@ -12,7 +12,7 @@ import Lead from '../models/Lead.js';
 const router = Router();
 
 let client = null;
-const getClient = () => {
+export const getClient = () => {
     if (!process.env.ANTHROPIC_API_KEY) return null;
     if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     return client;
@@ -158,57 +158,49 @@ Keep under 250 words. Be specific with numbers.`;
     }
 });
 
-// ─── PIPELINE AI FORECAST ─────────────────────────────────────────────────────
-// GET /api/ai/pipeline-forecast   — self-contained: fetches its own data from MongoDB
-router.get('/pipeline-forecast', async (req, res) => {
-    const ai = getClient();
-    if (!ai) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' });
+// ─── PIPELINE FORECAST (shared logic) ─────────────────────────────────────────
+export async function computePipelineForecast(ai) {
+    const ACTIVE = ['prospect', 'qualification', 'presentation', 'proposal', 'negotiation'];
+    const CLOSED = ['closed-won', 'closed-lost'];
 
-    try {
-        const ACTIVE = ['prospect','qualification','presentation','proposal','negotiation'];
-        const CLOSED = ['closed-won','closed-lost'];
+    const [activeLeads, closedLeads] = await Promise.all([
+        Lead.find({ deleted: { $ne: true }, stage: { $in: ACTIVE } }).lean(),
+        Lead.find({
+            deleted: { $ne: true },
+            stage: { $in: CLOSED },
+            updatedAt: { $gte: new Date(Date.now() - 365 * 86_400_000) },
+        }).lean(),
+    ]);
 
-        const [activeLeads, closedLeads] = await Promise.all([
-            Lead.find({ deleted: { $ne: true }, stage: { $in: ACTIVE } }).lean(),
-            Lead.find({
-                deleted: { $ne: true },
-                stage: { $in: CLOSED },
-                updatedAt: { $gte: new Date(Date.now() - 365 * 86_400_000) },
-            }).lean(),
-        ]);
+    const totalPipeline = activeLeads.reduce((s, l) => s + (l.value || 0), 0);
+    const weightedPipeline = activeLeads.reduce((s, l) => s + (l.value || 0) * ((l.probability || 0) / 100), 0);
 
-        // ── Metrics ──
-        const totalPipeline  = activeLeads.reduce((s, l) => s + (l.value || 0), 0);
-        const weightedPipeline = activeLeads.reduce((s, l) => s + (l.value || 0) * ((l.probability || 0) / 100), 0);
+    const won = closedLeads.filter(l => l.stage === 'closed-won').length;
+    const lost = closedLeads.filter(l => l.stage === 'closed-lost').length;
+    const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null;
 
-        const won  = closedLeads.filter(l => l.stage === 'closed-won').length;
-        const lost = closedLeads.filter(l => l.stage === 'closed-lost').length;
-        const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null;
+    const wonRevenue = closedLeads
+        .filter(l => l.stage === 'closed-won')
+        .reduce((s, l) => s + (l.closedValue || l.value || 0), 0);
 
-        const wonRevenue = closedLeads
-            .filter(l => l.stage === 'closed-won')
-            .reduce((s, l) => s + (l.closedValue || l.value || 0), 0);
+    const byStage = ACTIVE.map(s => ({
+        stage: s,
+        count: activeLeads.filter(l => l.stage === s).length,
+        value: activeLeads.filter(l => l.stage === s).reduce((a, l) => a + (l.value || 0), 0),
+    })).filter(s => s.count > 0);
 
-        // Stage distribution
-        const byStage = ACTIVE.map(s => ({
-            stage: s,
-            count: activeLeads.filter(l => l.stage === s).length,
-            value: activeLeads.filter(l => l.stage === s).reduce((a, l) => a + (l.value || 0), 0),
-        })).filter(s => s.count > 0);
+    const now = Date.now();
+    const closing30 = activeLeads.filter(l => l.expectedCloseDate && (new Date(l.expectedCloseDate).getTime() - now) <= 30 * 86_400_000 && (new Date(l.expectedCloseDate).getTime() - now) > 0);
+    const closing60 = activeLeads.filter(l => l.expectedCloseDate && (new Date(l.expectedCloseDate).getTime() - now) <= 60 * 86_400_000 && (new Date(l.expectedCloseDate).getTime() - now) > 0);
+    const closing90 = activeLeads.filter(l => l.expectedCloseDate && (new Date(l.expectedCloseDate).getTime() - now) <= 90 * 86_400_000 && (new Date(l.expectedCloseDate).getTime() - now) > 0);
 
-        // Deals closing in 30/60/90 days
-        const now = Date.now();
-        const closing30 = activeLeads.filter(l => l.expectedCloseDate && (new Date(l.expectedCloseDate).getTime() - now) <= 30 * 86_400_000 && (new Date(l.expectedCloseDate).getTime() - now) > 0);
-        const closing60 = activeLeads.filter(l => l.expectedCloseDate && (new Date(l.expectedCloseDate).getTime() - now) <= 60 * 86_400_000 && (new Date(l.expectedCloseDate).getTime() - now) > 0);
-        const closing90 = activeLeads.filter(l => l.expectedCloseDate && (new Date(l.expectedCloseDate).getTime() - now) <= 90 * 86_400_000 && (new Date(l.expectedCloseDate).getTime() - now) > 0);
+    const stale = activeLeads.filter(l => {
+        if (!l.interactions?.length) return true;
+        const last = new Date(l.interactions[l.interactions.length - 1].date);
+        return (now - last.getTime()) > 14 * 86_400_000;
+    }).length;
 
-        const stale = activeLeads.filter(l => {
-            if (!l.interactions?.length) return true;
-            const last = new Date(l.interactions[l.interactions.length - 1].date);
-            return (now - last.getTime()) > 14 * 86_400_000;
-        }).length;
-
-        const prompt = `You are a B2B revenue forecasting analyst. Analyze this pipeline data and produce a structured forecast.
+    const prompt = `You are a B2B revenue forecasting analyst. Analyze this pipeline data and produce a structured forecast.
 
 PIPELINE SNAPSHOT (${activeLeads.length} active deals):
 - Total pipeline value: $${Math.round(totalPipeline).toLocaleString()}
@@ -221,9 +213,9 @@ Stage distribution:
 ${byStage.map(s => `  ${s.stage}: ${s.count} deals, $${Math.round(s.value / 1000)}K`).join('\n')}
 
 Closing within timeframes:
-- Next 30 days: ${closing30.length} deals worth $${Math.round(closing30.reduce((s,l) => s + (l.value||0), 0) / 1000)}K
-- Next 60 days: ${closing60.length} deals worth $${Math.round(closing60.reduce((s,l) => s + (l.value||0), 0) / 1000)}K
-- Next 90 days: ${closing90.length} deals worth $${Math.round(closing90.reduce((s,l) => s + (l.value||0), 0) / 1000)}K
+- Next 30 days: ${closing30.length} deals worth $${Math.round(closing30.reduce((s, l) => s + (l.value || 0), 0) / 1000)}K
+- Next 60 days: ${closing60.length} deals worth $${Math.round(closing60.reduce((s, l) => s + (l.value || 0), 0) / 1000)}K
+- Next 90 days: ${closing90.length} deals worth $${Math.round(closing90.reduce((s, l) => s + (l.value || 0), 0) / 1000)}K
 
 Apply the historical win rate to the closing-period values to estimate likely revenue. If insufficient data, use weighted values with a 10-15% haircut.
 
@@ -238,26 +230,35 @@ Respond ONLY with valid JSON, no markdown:
   "topAction": "<1 imperative sentence — most impactful action this week>"
 }`;
 
-        const message = await ai.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 400,
-            messages: [{ role: 'user', content: prompt }],
-        });
+    const message = await ai.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }],
+    });
 
-        const raw = message.content[0].text.trim().replace(/^```json\s*|^```\s*|```$/gm, '').trim();
-        const parsed = JSON.parse(raw);
+    const raw = message.content[0].text.trim().replace(/^```json\s*|^```\s*|```$/gm, '').trim();
+    const parsed = JSON.parse(raw);
 
-        res.json({
-            health:    parsed.health || 'At Risk',
-            d30:       Math.max(0, parseInt(parsed.d30) || 0),
-            d60:       Math.max(0, parseInt(parsed.d60) || 0),
-            d90:       Math.max(0, parseInt(parsed.d90) || 0),
-            narrative: String(parsed.narrative || ''),
-            topRisk:   String(parsed.topRisk || ''),
-            topAction: String(parsed.topAction || ''),
-            meta: { activeDeals: activeLeads.length, weightedPipeline: Math.round(weightedPipeline), winRate },
-            generatedAt: new Date().toISOString(),
-        });
+    return {
+        health: parsed.health || 'At Risk',
+        d30: Math.max(0, parseInt(parsed.d30) || 0),
+        d60: Math.max(0, parseInt(parsed.d60) || 0),
+        d90: Math.max(0, parseInt(parsed.d90) || 0),
+        narrative: String(parsed.narrative || ''),
+        topRisk: String(parsed.topRisk || ''),
+        topAction: String(parsed.topAction || ''),
+        meta: { activeDeals: activeLeads.length, weightedPipeline: Math.round(weightedPipeline), winRate },
+        generatedAt: new Date().toISOString(),
+    };
+}
+
+router.get('/pipeline-forecast', async (req, res) => {
+    const ai = getClient();
+    if (!ai) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' });
+
+    try {
+        const forecast = await computePipelineForecast(ai);
+        res.json(forecast);
     } catch (err) {
         console.error('[AI Pipeline Forecast] Error:', err.message);
         res.status(500).json({ error: err.message });
