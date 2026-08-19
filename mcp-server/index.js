@@ -26,7 +26,7 @@ server.registerTool(
             email: z.string().optional(),
             phone: z.string().optional(),
             value: z.number().optional().describe('Valor estimado de la oportunidad'),
-            stage: z.string().optional().describe("Etapa inicial (default: 'prospect')"),
+            stage: z.enum(['prospect', 'qualification', 'presentation', 'proposal', 'negotiation', 'closed-won', 'closed-lost']).optional().describe("Etapa inicial (default: 'prospect')"),
             description: z.string().optional(),
             manufacturer: z.string().optional(),
             country: z.string().optional().describe('País del cliente (ej: COLOMBIA)'),
