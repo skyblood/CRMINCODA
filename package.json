@@ -29,8 +29,8 @@
     "dev:full": "concurrently -k -n server,vite -c blue,cyan \"node server/index.js\" \"vite\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node --import tsx/esm --test tests/*.test.ts tests/ledger/*.test.ts",
-    "test:watch": "node --import tsx/esm --test --watch tests/*.test.ts tests/ledger/*.test.ts",
+    "test": "node --import tsx/esm --test tests/*.test.ts tests/ledger/*.test.ts tests/ai-reports/*.test.ts tests/board-reports/*.test.ts",
+    "test:watch": "node --import tsx/esm --test --watch tests/*.test.ts tests/ledger/*.test.ts tests/ai-reports/*.test.ts tests/board-reports/*.test.ts",
     "start": "pnpm build && node server/index.js"
   },
   "dependencies": {
