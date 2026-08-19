@@ -424,11 +424,17 @@ router.get('/', (_req, res) => {
             'GET /api/v1/leads/:id',
             'POST /api/v1/leads',
             'GET /api/v1/pipeline',
+            'GET /api/v1/pipeline-forecast',
             'GET /api/v1/projects[?status=&type=]',
             'GET /api/v1/projects/:id',
             'GET /api/v1/contacts',
             'GET /api/v1/users',
             'GET /api/v1/transactions',
+            'GET /api/v1/financials/summary',
+            'GET /api/v1/cash/summary',
+            'GET /api/v1/cash/mercury-status',
+            'GET /api/v1/goals',
+            'GET /api/v1/commissions/summary',
         ],
     });
 });
