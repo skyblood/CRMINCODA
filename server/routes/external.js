@@ -17,6 +17,7 @@ import JournalEntry from '../models/JournalEntry.js';
 import Payment from '../models/Payment.js';
 import Invoice from '../models/Invoice.js';
 import Goal from '../models/Goal.js';
+import Commission from '../models/Commission.js';
 import { apiKeyAuth, requireScope } from '../middleware/apiKeyAuth.js';
 import { validateExternalQuery } from '../middleware/sanitize.js';
 import { dispatchWebhooks } from '../webhookService.js';
@@ -379,6 +380,33 @@ router.get('/transactions', requireScope('transactions'), async (req, res) => {
         const docs = await Transaction.find().lean();
         const clean = docs.map(({ _id, __v, createdAt, updatedAt, ...rest }) => rest);
         res.json({ data: clean, count: clean.length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── COMMISSIONS ────────────────────────────────────────────────────────────
+// GET /api/v1/commissions/summary — totals + per-person split + status breakdown
+router.get('/commissions/summary', requireScope('commissions'), async (req, res) => {
+    try {
+        const docs = await Commission.find().lean();
+
+        let totalAmountUSD = 0, bmRetainedUSD = 0, fabianShareUSD = 0, spencerShareUSD = 0;
+        const byStatus = {};
+        for (const c of docs) {
+            totalAmountUSD += c.amountUSD || 0;
+            bmRetainedUSD += c.split?.bmRetainedUSD || 0;
+            fabianShareUSD += c.split?.fabianShareUSD || 0;
+            spencerShareUSD += c.split?.spencerShareUSD || 0;
+            byStatus[c.status] = (byStatus[c.status] || 0) + (c.amountUSD || 0);
+        }
+
+        res.json({
+            count: docs.length,
+            totalAmountUSD,
+            byPerson: { bmRetainedUSD, fabianShareUSD, spencerShareUSD },
+            byStatus,
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
