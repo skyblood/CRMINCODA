@@ -1,11 +1,12 @@
 /**
- * External read-only API — v1
+ * External API — v1
  * Protected by API key. Used by integrations like Claude COWORK.
  *
  * Base URL: /api/v1
  * Auth:     Authorization: Bearer crm_bm_<key>   OR   X-API-Key: crm_bm_<key>
  */
 import { Router } from 'express';
+import crypto from 'crypto';
 import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
 import Contact from '../models/Contact.js';
@@ -13,6 +14,9 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import { apiKeyAuth, requireScope } from '../middleware/apiKeyAuth.js';
 import { validateExternalQuery } from '../middleware/sanitize.js';
+import { dispatchWebhooks } from '../webhookService.js';
+import { emitCollectionChange } from '../socketInstance.js';
+import { logAudit } from '../auditService.js';
 
 const router = Router();
 
@@ -44,6 +48,45 @@ router.get('/leads/:id', requireScope('leads'), async (req, res) => {
         res.json(rest);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/v1/leads — create a new opportunity
+router.post('/leads', requireScope('leads'), async (req, res) => {
+    try {
+        const body = req.body || {};
+        if (!body.companyName || !body.contactName) {
+            return res.status(400).json({ error: 'companyName and contactName are required.' });
+        }
+
+        const stage = body.stage || 'prospect';
+        const doc = await Lead.create({
+            ...body,
+            id: body.id || `lead_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+            stage,
+            value: body.value || 0,
+            stageHistory: [{
+                stage,
+                enteredAt: new Date().toISOString(),
+                exitedAt: null,
+                daysInStage: 0,
+            }],
+        });
+
+        const { _id, __v, createdAt, updatedAt, ...rest } = doc.toObject();
+        dispatchWebhooks('lead.created', rest, `apikey:${req.apiKey?.name || req.apiKey?.id}`).catch(() => {});
+        emitCollectionChange('leads', 'created', rest);
+        logAudit({
+            entityType: 'lead',
+            entityId: rest.id,
+            action: 'created',
+            userId: `apikey:${req.apiKey?.id}`,
+            userName: `API Key: ${req.apiKey?.name || 'external'}`,
+        });
+
+        res.status(201).json(rest);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
     }
 });
 
@@ -158,6 +201,7 @@ router.get('/', (_req, res) => {
         endpoints: [
             'GET /api/v1/leads[?stage=&manufacturer=]',
             'GET /api/v1/leads/:id',
+            'POST /api/v1/leads',
             'GET /api/v1/pipeline',
             'GET /api/v1/projects[?status=&type=]',
             'GET /api/v1/projects/:id',
