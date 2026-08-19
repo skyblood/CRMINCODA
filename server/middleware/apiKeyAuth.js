@@ -24,13 +24,17 @@ const setCache = (hash, apiKey) => {
 // Invalidate a specific key (call this after revoking a key)
 export const invalidateKeyCache = (hash) => keyCache.delete(hash);
 
-// Clear stale entries periodically (every 10 min) to prevent memory leak
+// Clear stale entries periodically (every 10 min) to prevent memory leak.
+// .unref() so this timer alone doesn't keep a process alive — matters for
+// short-lived processes (test runners, one-off scripts) that import this
+// module; irrelevant to the long-running server, which stays up on its
+// HTTP listener regardless.
 setInterval(() => {
     const now = Date.now();
     for (const [hash, entry] of keyCache) {
         if (now > entry.expiresAt) keyCache.delete(hash);
     }
-}, 10 * 60 * 1000);
+}, 10 * 60 * 1000).unref();
 
 // ─── PER-KEY RATE LIMITER ─────────────────────────────────────────────────────
 // Sliding window counter per key hash — 1000 req / 15 min
