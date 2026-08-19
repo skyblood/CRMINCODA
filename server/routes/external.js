@@ -16,6 +16,7 @@ import LedgerAccount from '../models/LedgerAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
 import Payment from '../models/Payment.js';
 import Invoice from '../models/Invoice.js';
+import Goal from '../models/Goal.js';
 import { apiKeyAuth, requireScope } from '../middleware/apiKeyAuth.js';
 import { validateExternalQuery } from '../middleware/sanitize.js';
 import { dispatchWebhooks } from '../webhookService.js';
@@ -296,6 +297,19 @@ router.get('/cash/mercury-status', requireScope('cash'), async (req, res) => {
         }
 
         res.json({ reconciledCount, pendingCount, reconciledUSD, pendingUSD });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── GOALS ──────────────────────────────────────────────────────────────────
+// GET /api/v1/goals — company revenue goals by year
+router.get('/goals', requireScope('goals'), async (req, res) => {
+    try {
+        const docs = await Goal.find().lean();
+        const goalsObj = {};
+        docs.forEach(g => { goalsObj[g.year] = g.amount; });
+        res.json(goalsObj);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
