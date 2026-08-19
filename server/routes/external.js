@@ -22,6 +22,7 @@ import { dispatchWebhooks } from '../webhookService.js';
 import { emitCollectionChange } from '../socketInstance.js';
 import { logAudit } from '../auditService.js';
 import { getClient as getAiClient, computePipelineForecast } from './aiReports.js';
+import { CASH_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
 
 const router = Router();
 
@@ -271,6 +272,30 @@ router.get('/cash/summary', requireScope('cash'), async (req, res) => {
             globalDSO,
             topDebtors: topDebtors.map(d => ({ clientName: d.clientName, totalOwedUSD: d.totalOwedUSD })),
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/v1/cash/mercury-status — reconciled vs. pending cash-account journal lines
+router.get('/cash/mercury-status', requireScope('cash'), async (req, res) => {
+    try {
+        const cashAccount = await LedgerAccount.findOne({ code: CASH_ACCOUNT_CODE }).lean();
+        if (!cashAccount) {
+            return res.json({ reconciledCount: 0, pendingCount: 0, reconciledUSD: 0, pendingUSD: 0 });
+        }
+
+        const entries = await JournalEntry.find({ status: 'posted', 'lines.accountId': cashAccount.id }).lean();
+        let reconciledCount = 0, pendingCount = 0, reconciledUSD = 0, pendingUSD = 0;
+        for (const entry of entries) {
+            for (const line of entry.lines) {
+                if (line.accountId !== cashAccount.id) continue;
+                if (line.reconciled) { reconciledCount++; reconciledUSD += line.amountUSD; }
+                else { pendingCount++; pendingUSD += line.amountUSD; }
+            }
+        }
+
+        res.json({ reconciledCount, pendingCount, reconciledUSD, pendingUSD });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
