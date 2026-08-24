@@ -243,6 +243,17 @@ export interface Lead {
   aiScoreReason?: string;
   aiNextAction?: string; // AI-suggested next action for this deal
 
+  // Lead Enrichment (domain-based)
+  enrichment?: {
+    domain: string;
+    title: string;
+    metaDescription: string;
+    ogSiteName: string;
+    industryGuess: string;
+    enrichedAt: string | null;
+    status?: 'enriched' | 'failed' | 'skipped_free_domain';
+  };
+
   // WIN / LOSS ANALYSIS
   wonReason?: string;      // Why this deal was won (Best Price | Best Solution | Relationship | References | Speed | Support | Other)
   lostReason?: string;     // Price | Competitor | No Budget | No Decision | Timeline | Other
