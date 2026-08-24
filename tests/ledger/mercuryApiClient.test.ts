@@ -43,16 +43,19 @@ describe('listAccountTransactions', () => {
 
   it('follows the start_after cursor across pages until a short page ends pagination', async () => {
     let calls = 0;
+    let secondPageCursor: string | null = null;
     const fetchImpl = fakeFetch((url) => {
       calls++;
       if (!url.searchParams.get('start_after')) {
         return { status: 200, body: { transactions: Array.from({ length: 100 }, (_, i) => ({ id: `tx_${i}` })) } };
       }
+      secondPageCursor = url.searchParams.get('start_after');
       return { status: 200, body: { transactions: [{ id: 'tx_last' }] } };
     });
     const results = await listAccountTransactions('acc_1', {}, fetchImpl);
     assert.equal(calls, 2);
     assert.equal(results.length, 101);
+    assert.equal(secondPageCursor, 'tx_99');
   });
 
   it('stops after MAX_PAGES (20) even if every page is full, never looping forever', async () => {
