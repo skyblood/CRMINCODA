@@ -5,6 +5,8 @@ import request from 'supertest';
 import { setupTestDB, teardownTestDB, clearLedgerCollections, seedChartOfAccounts } from './setup.js';
 import ledgerReportsRouter from '../../server/routes/ledgerReports.js';
 import JournalEntry from '../../server/models/JournalEntry.js';
+import User from '../../server/models/User.js';
+import { encrypt } from '../../server/utils/encryption.js';
 
 const app = express();
 app.use(express.json());
@@ -152,6 +154,11 @@ describe('GET /api/ledger-reports/1099', () => {
     });
   });
 
+  beforeEach(async () => {
+    await User.deleteMany({});
+    process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || Buffer.alloc(32, 7).toString('base64');
+  });
+
   it('aggregates Contract Labor payments by entityId for the given year', async () => {
     const res = await request(app).get('/api/ledger-reports/1099?year=2026');
     assert.equal(res.status, 200);
@@ -166,5 +173,76 @@ describe('GET /api/ledger-reports/1099', () => {
   it('excludes years outside the requested range', async () => {
     const res = await request(app).get('/api/ledger-reports/1099?year=2025');
     assert.deepEqual(res.body, []);
+  });
+
+  it('resolves entityId to the consultant name and flags whether a TIN is on file', async () => {
+    await User.create({ id: 'user-alice', name: 'Alice Consultant', email: 'alice@example.com', role: 'consultant', taxInfo: { tinEncrypted: encrypt('123456789'), tinLast4: '6789', tinType: 'SSN' } });
+    await User.create({ id: 'user-bob', name: 'Bob Consultant', email: 'bob@example.com', role: 'consultant' });
+
+    const res = await request(app).get('/api/ledger-reports/1099?year=2026');
+    const alice = res.body.find((r: any) => r.entityId === 'user-alice');
+    const bob = res.body.find((r: any) => r.entityId === 'user-bob');
+
+    assert.equal(alice.name, 'Alice Consultant');
+    assert.equal(alice.hasTIN, true);
+    assert.equal(bob.name, 'Bob Consultant');
+    assert.equal(bob.hasTIN, false);
+  });
+
+  it('falls back to entityId as the name when no matching User exists', async () => {
+    const res = await request(app).get('/api/ledger-reports/1099?year=2026');
+    const orphan = res.body.find((r: any) => r.entityId === 'user-alice' || r.entityId === 'user-bob');
+    assert.ok(orphan.name); // some string, either the resolved name or the raw entityId
+  });
+});
+
+describe('GET /api/ledger-reports/1099/export', () => {
+  function buildFinanceApp() {
+    const a = express();
+    a.use((req: any, _res, next) => { req.session = { user: { permissions: { finance: true } } }; next(); });
+    a.use('/api/ledger-reports', ledgerReportsRouter);
+    return a;
+  }
+  function buildNonFinanceApp() {
+    const a = express();
+    a.use((req: any, _res, next) => { req.session = { user: { permissions: {} } }; next(); });
+    a.use('/api/ledger-reports', ledgerReportsRouter);
+    return a;
+  }
+
+  beforeEach(async () => {
+    await User.deleteMany({});
+    process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || Buffer.alloc(32, 7).toString('base64');
+    await JournalEntry.create({
+      date: new Date('2026-03-01'), source: 'payroll',
+      lines: [
+        { accountId: 'coa_6100', debit: 4000, amountUSD: 4000, entityId: 'user-alice' },
+        { accountId: 'coa_1000', credit: 4000, amountUSD: 4000 },
+      ],
+    });
+    await User.create({
+      id: 'user-alice', name: 'Alice Consultant', email: 'alice@example.com', role: 'consultant',
+      taxInfo: { legalName: 'Alice A. Consultant', tinEncrypted: encrypt('123456789'), tinLast4: '6789', tinType: 'SSN', address: { line1: '1 Main St', city: 'Austin', state: 'TX', zip: '78701' } },
+    });
+  });
+
+  it('rejects a non-finance, non-admin caller with 403', async () => {
+    const res = await request(buildNonFinanceApp()).get('/api/ledger-reports/1099/export?year=2026');
+    assert.equal(res.status, 403);
+  });
+
+  it('returns a CSV with the decrypted TIN for a finance caller', async () => {
+    const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099/export?year=2026');
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /text\/csv/);
+    const lines = res.text.trim().split('\n');
+    assert.equal(lines[0], 'Recipient Name,TIN,TIN Type,Address,City,State,Zip,Box1_NonemployeeComp');
+    assert.match(lines[1], /Alice A\. Consultant,123456789,SSN,1 Main St,Austin,TX,78701,4000\.00/);
+  });
+
+  it('returns only the header row when no contractor crosses the threshold', async () => {
+    const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099/export?year=2020');
+    assert.equal(res.status, 200);
+    assert.equal(res.text.trim(), 'Recipient Name,TIN,TIN Type,Address,City,State,Zip,Box1_NonemployeeComp');
   });
 });

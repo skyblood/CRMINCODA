@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import LedgerAccount from '../models/LedgerAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
+import User from '../models/User.js';
+import { decrypt } from '../utils/encryption.js';
 
 const router = Router();
 
@@ -159,12 +161,87 @@ router.get('/1099', async (req, res) => {
             }
         }
 
-        const rows = Object.entries(totals).map(([entityId, totalUSD]) => ({
-            entityId,
-            totalUSD,
-            crossesThreshold: totalUSD >= NEC_1099_THRESHOLD_USD,
-        }));
+        const entityIds = Object.keys(totals);
+        const users = await User.find({ id: { $in: entityIds } }).lean();
+        const userById = Object.fromEntries(users.map(u => [u.id, u]));
+
+        const rows = entityIds.map(entityId => {
+            const totalUSD = totals[entityId];
+            const user = userById[entityId];
+            return {
+                entityId,
+                name: user?.name || entityId,
+                totalUSD,
+                crossesThreshold: totalUSD >= NEC_1099_THRESHOLD_USD,
+                hasTIN: !!user?.taxInfo?.tinEncrypted,
+            };
+        });
         res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+function csvEscape(value) {
+    const s = String(value ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+router.get('/1099/export', async (req, res) => {
+    if (!(req.session?.user?.permissions?.finance || req.session?.user?.permissions?.admin)) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+    try {
+        const year = Number(req.query.year) || new Date().getFullYear();
+        const header = 'Recipient Name,TIN,TIN Type,Address,City,State,Zip,Box1_NonemployeeComp';
+        const laborAccount = await LedgerAccount.findOne({ code: CONTRACT_LABOR_ACCOUNT_CODE }).lean();
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="1099-${year}.csv"`);
+
+        if (!laborAccount) return res.send(header + '\n');
+
+        const entries = await JournalEntry.find({
+            status: 'posted',
+            date: { $gte: new Date(`${year}-01-01`), $lte: new Date(`${year}-12-31T23:59:59.999Z`) },
+            'lines.accountId': laborAccount.id,
+        }).lean();
+
+        const totals = Object.create(null);
+        for (const entry of entries) {
+            for (const line of entry.lines) {
+                if (line.accountId !== laborAccount.id || !line.entityId || line.debit <= 0) continue;
+                totals[line.entityId] = (totals[line.entityId] || 0) + line.amountUSD;
+            }
+        }
+
+        const qualifyingIds = Object.keys(totals).filter(id => totals[id] >= NEC_1099_THRESHOLD_USD);
+        const users = await User.find({ id: { $in: qualifyingIds } }).lean();
+        const userById = Object.fromEntries(users.map(u => [u.id, u]));
+
+        const rows = [header];
+        for (const entityId of qualifyingIds) {
+            const user = userById[entityId];
+            const taxInfo = user?.taxInfo || {};
+            let tin = '';
+            if (taxInfo.tinEncrypted) {
+                try { tin = decrypt(taxInfo.tinEncrypted); }
+                catch { tin = 'TIN_DECRYPT_ERROR'; }
+            }
+            const addr = taxInfo.address || {};
+            rows.push([
+                csvEscape(taxInfo.legalName || user?.name || entityId),
+                csvEscape(tin),
+                csvEscape(taxInfo.tinType || ''),
+                csvEscape(addr.line1 || ''),
+                csvEscape(addr.city || ''),
+                csvEscape(addr.state || ''),
+                csvEscape(addr.zip || ''),
+                csvEscape(totals[entityId].toFixed(2)),
+            ].join(','));
+        }
+
+        res.send(rows.join('\n') + '\n');
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

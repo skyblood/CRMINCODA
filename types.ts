@@ -586,8 +586,10 @@ export interface BalanceSheetReport {
 
 export interface NineninenineRow {
   entityId: string;
+  name: string;
   totalUSD: number;
   crossesThreshold: boolean;
+  hasTIN: boolean;
 }
 
 // ==================================================================================
