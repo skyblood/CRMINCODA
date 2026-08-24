@@ -68,9 +68,13 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({ projects, up
   const [taxError, setTaxError] = useState('');
 
   useEffect(() => {
-    apiFetch('/api/tax-profile/me').then(async (r) => {
-      if (r.ok) setTaxProfile(await r.json());
-    });
+    apiFetch('/api/tax-profile/me')
+      .then(async (r) => {
+        if (r.ok) setTaxProfile(await r.json());
+      })
+      .catch((err) => {
+        console.error('[ConsultantPortal] Failed to load tax profile:', err);
+      });
   }, []);
 
   // Filter projects where the current user is in the team
