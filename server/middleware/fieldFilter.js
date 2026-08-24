@@ -16,8 +16,8 @@ const RESTRICTIONS = {
         consultant: ['value', 'probability', 'commissionAmount', 'factoryCommission', 'closedValue'],
     },
     users: {
-        sales:      ['hourlyCost', 'monthlySalary', 'salaryHistory'],
-        consultant: ['hourlyCost', 'monthlySalary', 'salaryHistory', 'salesQuota', 'permissions'],
+        sales:      ['hourlyCost', 'monthlySalary', 'salaryHistory', 'taxInfo'],
+        consultant: ['hourlyCost', 'monthlySalary', 'salaryHistory', 'salesQuota', 'permissions', 'taxInfo'],
     },
     projects: {
         consultant: ['payments', 'factoryCommissionRate', 'totalRevenue', 'profit', 'marginPct'],

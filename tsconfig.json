@@ -32,6 +32,7 @@
     "tests/search.test.ts",
     "tests/encryption.test.ts",
     "tests/taxProfile.test.ts",
+    "tests/fieldFilter.test.ts",
     "tests/leadEnrichmentService.test.ts",
     "tests/leadEnrichmentScheduler.test.ts",
     "tests/leadEnrichmentRoute.test.ts"
