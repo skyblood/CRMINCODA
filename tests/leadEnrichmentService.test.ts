@@ -136,6 +136,92 @@ describe('fetchSiteMetadata', () => {
     mock.restoreAll();
   });
 
+  it('rejects the IPv6 loopback address (::1)', async () => {
+    mockDnsLookup([{ address: '::1', family: 6 }]);
+    const fetchMock = mock.method(globalThis, 'fetch', async () => {
+      throw new Error('fetch should not have been called — DNS check must run first');
+    });
+    await assert.rejects(fetchSiteMetadata('v6-loopback.com'), /private|internal/i);
+    assert.equal(fetchMock.mock.callCount(), 0);
+    mock.restoreAll();
+  });
+
+  it('rejects fc00::/7 unique local addresses', async () => {
+    for (const address of ['fc00::1', 'fd12:3456::1']) {
+      mockDnsLookup([{ address, family: 6 }]);
+      const fetchMock = mock.method(globalThis, 'fetch', async () => {
+        throw new Error('fetch should not have been called — DNS check must run first');
+      });
+      await assert.rejects(fetchSiteMetadata('v6-ula.com'), /private|internal/i, `expected ${address} to be rejected`);
+      assert.equal(fetchMock.mock.callCount(), 0);
+      mock.restoreAll();
+    }
+  });
+
+  it('rejects fe80::/10 link-local addresses', async () => {
+    mockDnsLookup([{ address: 'fe80::1', family: 6 }]);
+    const fetchMock = mock.method(globalThis, 'fetch', async () => {
+      throw new Error('fetch should not have been called — DNS check must run first');
+    });
+    await assert.rejects(fetchSiteMetadata('v6-linklocal.com'), /private|internal/i);
+    assert.equal(fetchMock.mock.callCount(), 0);
+    mock.restoreAll();
+  });
+
+  it('rejects the IPv4-mapped IPv6 form of the cloud metadata address (::ffff:169.254.169.254)', async () => {
+    mockDnsLookup([{ address: '::ffff:169.254.169.254', family: 6 }]);
+    const fetchMock = mock.method(globalThis, 'fetch', async () => {
+      throw new Error('fetch should not have been called — DNS check must run first');
+    });
+    await assert.rejects(fetchSiteMetadata('v6-mapped-metadata.com'), /private|internal/i);
+    assert.equal(fetchMock.mock.callCount(), 0);
+    mock.restoreAll();
+  });
+
+  it('rejects the IPv4-compatible IPv6 form of the cloud metadata address (::169.254.169.254)', async () => {
+    // The older, distinct "IPv4-compatible" canonical form (no "ffff:") —
+    // this is the gap Finding 1 closes.
+    mockDnsLookup([{ address: '::169.254.169.254', family: 6 }]);
+    const fetchMock = mock.method(globalThis, 'fetch', async () => {
+      throw new Error('fetch should not have been called — DNS check must run first');
+    });
+    await assert.rejects(fetchSiteMetadata('v6-compat-metadata.com'), /private|internal/i);
+    assert.equal(fetchMock.mock.callCount(), 0);
+    mock.restoreAll();
+  });
+
+  it('does NOT reject a genuinely public IPv6 address (guard is not failing closed on all of IPv6)', async () => {
+    mockDnsLookup([{ address: '2001:4860:4860::8888', family: 6 }]);
+    const html = `<title>Public IPv6 Site</title>`;
+    mock.method(globalThis, 'fetch', async () => ({
+      ok: true,
+      status: 200,
+      body: { getReader: () => {
+        let sent = false;
+        return { read: async () => {
+          if (sent) return { done: true, value: undefined };
+          sent = true;
+          return { done: false, value: new TextEncoder().encode(html) };
+        }, cancel: async () => {} };
+      } },
+    }));
+
+    const meta = await fetchSiteMetadata('public-v6-site.com');
+
+    assert.equal(meta.title, 'Public IPv6 Site');
+    mock.restoreAll();
+  });
+
+  it('rejects when the target responds with a 3xx redirect (redirect: manual must not auto-follow)', async () => {
+    mockDnsLookup();
+    // Matches Node's real fetch() behavior with redirect: 'manual' against a
+    // 3xx response: it returns the actual 3xx status with ok: false rather
+    // than auto-following or throwing at the fetch() call site.
+    mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 302 }));
+    await assert.rejects(fetchSiteMetadata('redirecting.com'), /302/);
+    mock.restoreAll();
+  });
+
   it('succeeds normally when DNS resolves to a public address (happy path still works)', async () => {
     mockDnsLookup([{ address: '93.184.216.34', family: 4 }]);
     const html = `<title>Public Site</title>`;

@@ -59,6 +59,13 @@ function isPrivateOrReservedIPv6(address) {
   const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(normalized);
   if (mapped) return isPrivateOrReservedIPv4(mapped[1]);
 
+  // IPv4-compatible (::a.b.c.d, no "ffff:") — the older, distinct
+  // zero-prefixed canonical form (top 96 bits zero, no well-known prefix).
+  // This does NOT match bare "::" or "::1" since those have no
+  // dotted-decimal suffix for the regex to capture.
+  const compatible = /^::(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(normalized);
+  if (compatible) return isPrivateOrReservedIPv4(compatible[1]);
+
   // fc00::/7 unique local addresses — first hextet is fc00–fdff.
   if (/^f[cd][0-9a-f]{2}:/.test(normalized)) return true;
 
@@ -87,6 +94,17 @@ function isPrivateOrReservedIP(address) {
  * checked IP via a custom dispatcher/agent, which is out of scope here.
  */
 async function resolveDomainSafely(hostname) {
+  // Note (accepted residual risk — NOT fixed here): Promise.race only bounds
+  // how long THIS function awaits. dns.promises.lookup() delegates to
+  // libuv's getaddrinfo() on the threadpool (default size 4, shared across
+  // the whole process for other fs/dns/crypto work); Node's dns.lookup has
+  // no cancellation API, so when the race's timeout fires, the underlying
+  // getaddrinfo() call keeps running until the OS resolver itself gives up
+  // (which can exceed this 3000ms bound by a wide margin). Enough
+  // concurrently-triggered lookups against an unresponsive DNS server could
+  // saturate the threadpool and starve unrelated async work (other fs/dns
+  // calls) sharing it. A full fix would mean switching to a genuinely
+  // abortable lower-level resolver, which is out of scope here.
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(
