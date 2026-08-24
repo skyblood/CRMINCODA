@@ -15,53 +15,25 @@ router.get('/', async (req, res) => {
     if (!q) return res.json({ results: { leads: [], projects: [], contacts: [], skus: [], transactions: [] }, total: 0 });
 
     const limit = Math.min(parseInt(req.query.limit) || 5, 25);
-    const regex = { $regex: q, $options: 'i' };
+    const textSearch = { $text: { $search: q } };
+    const scoreProjection = { score: { $meta: 'textScore' } };
     const isAdmin = req.session.user?.permissions?.admin;
 
     const [leads, projects, contacts, skus, transactions] = await Promise.all([
-      Lead.find({
-        deleted: { $ne: true },
-        $or: [
-          { companyName: regex },
-          { contactName: regex },
-          { email: regex },
-          { description: regex },
-          { manufacturer: regex },
-          { partnerName: regex }
-        ]
-      }).lean().limit(limit),
+      Lead.find({ deleted: { $ne: true }, ...textSearch }, scoreProjection)
+        .sort(scoreProjection).lean().limit(limit),
 
-      Project.find({
-        $or: [
-          { name: regex },
-          { clientName: regex }
-        ]
-      }).lean().limit(limit),
+      Project.find(textSearch, scoreProjection)
+        .sort(scoreProjection).lean().limit(limit),
 
-      Contact.find({
-        $or: [
-          { name: regex },
-          { companyName: regex },
-          { email: regex },
-          { phone: regex }
-        ]
-      }).lean().limit(limit),
+      Contact.find(textSearch, scoreProjection)
+        .sort(scoreProjection).lean().limit(limit),
 
-      SKU.find({
-        $or: [
-          { code: regex },
-          { name: regex },
-          { description: regex }
-        ]
-      }).lean().limit(limit),
+      SKU.find(textSearch, scoreProjection)
+        .sort(scoreProjection).lean().limit(limit),
 
       isAdmin
-        ? Transaction.find({
-            $or: [
-              { title: regex },
-              { description: regex }
-            ]
-          }).lean().limit(limit)
+        ? Transaction.find(textSearch, scoreProjection).sort(scoreProjection).lean().limit(limit)
         : Promise.resolve([])
     ]);
 

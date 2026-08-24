@@ -38,6 +38,7 @@ const TransactionSchema = new mongoose.Schema({
 
 TransactionSchema.index({ type: 1, dateObj: -1 });
 TransactionSchema.index({ category: 1 });
+TransactionSchema.index({ title: 'text', description: 'text' });
 
 // Auto-post to the general ledger on creation only (not on every edit — see
 // Task 5 of docs/superpowers/plans/2026-07-28-accounting-ledger.md for why).

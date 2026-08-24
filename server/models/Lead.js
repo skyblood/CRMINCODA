@@ -52,5 +52,13 @@ const LeadSchema = new mongoose.Schema({
 LeadSchema.index({ stage: 1, createdAt: -1 });
 LeadSchema.index({ assignedTo: 1 });
 LeadSchema.index({ deleted: 1, stage: 1 });
+LeadSchema.index({
+  companyName: 'text',
+  contactName: 'text',
+  email: 'text',
+  description: 'text',
+  manufacturer: 'text',
+  partnerName: 'text',
+});
 
 export default mongoose.model('Lead', LeadSchema);

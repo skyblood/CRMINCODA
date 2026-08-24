@@ -11,4 +11,6 @@ const ContactSchema = new mongoose.Schema({
     lastContacted: String
 }, { timestamps: true, strict: false });
 
+ContactSchema.index({ name: 'text', companyName: 'text', email: 'text', phone: 'text' });
+
 export default mongoose.model('Contact', ContactSchema);
