@@ -32,13 +32,51 @@ export async function listAccounts(fetchImpl = fetch) {
 export async function listAccountTransactions(accountId, { start, end } = {}, fetchImpl = fetch) {
   const results = [];
   let startAfter;
+  let lastPageWasFull = false;
+  let pagesFetched = 0;
+
   for (let page = 0; page < MAX_PAGES; page++) {
     const data = await mercuryFetch(`/account/${accountId}/transactions`, {
       start, end, limit: 100, order: 'asc', start_after: startAfter,
     }, fetchImpl);
+    pagesFetched++;
     results.push(...data.transactions);
-    if (data.transactions.length < 100) break;
-    startAfter = data.transactions[data.transactions.length - 1].id;
+
+    lastPageWasFull = data.transactions.length >= 100;
+    if (!lastPageWasFull) break;
+
+    // Defensive guard against non-advancing pagination: this assumes
+    // Mercury's API honors start_after cursor pagination for this endpoint,
+    // an assumption we can't independently verify. If the next cursor is
+    // identical to the one we just requested with, the API most likely isn't
+    // honoring the cursor at all — stop here (treated the same as a short
+    // page, no error) instead of re-fetching the same page MAX_PAGES times.
+    const nextStartAfter = data.transactions[data.transactions.length - 1].id;
+    if (nextStartAfter === startAfter) {
+      lastPageWasFull = false;
+      break;
+    }
+    startAfter = nextStartAfter;
   }
-  return results;
+
+  // If we stopped only because we ran out of pages, and the last page we
+  // fetched was still full, this is a real (likely > MAX_PAGES*100
+  // transaction) date range being silently truncated — not a natural end of
+  // pagination. Fail loudly rather than hand the caller an incomplete list
+  // that would masquerade as a complete reconciliation.
+  if (lastPageWasFull && pagesFetched === MAX_PAGES) {
+    throw new Error(`Mercury returned more than ${MAX_PAGES * 100} transactions for this date range — narrow the range and sync again`);
+  }
+
+  // Second, independent safety net: dedupe by transaction id in case of any
+  // duplicate-fetching bug (cursor-related or otherwise) leaking duplicate
+  // rows downstream into reconcileRows.
+  const seen = new Set();
+  const deduped = [];
+  for (const t of results) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id);
+    deduped.push(t);
+  }
+  return deduped;
 }
