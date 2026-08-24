@@ -296,7 +296,7 @@ app.use('/api/commissions', commissionsRouter);
 app.use('/api/backup', makeLimit(60 * 60 * 1000, 10, 'Backup limit exceeded.'), backupRouter);
 
 // ==================== HEALTH CHECK ====================
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+app.use('/api/health', healthRouter);
 app.get('/api/health/scheduler', async (_req, res) => {
   try {
     const health = await getSchedulerHealth();
@@ -337,8 +337,6 @@ app.put('/api/settings', async (req, res) => {
         res.status(400).json({ error: err.message });
     }
 });
-
-app.use('/api/health', healthRouter);
 
 // ==================== STATIC FRONTEND (production) ====================
 const distPath = join(__dirname, '..', 'dist');
