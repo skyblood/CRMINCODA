@@ -37,7 +37,8 @@
     "tests/leadEnrichmentScheduler.test.ts",
     "tests/leadEnrichmentRoute.test.ts",
     "tests/webhookSecrets.test.ts",
-    "tests/health.test.ts"
+    "tests/health.test.ts",
+    "tests/notificationCombine.test.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

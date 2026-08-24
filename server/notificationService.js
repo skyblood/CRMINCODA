@@ -3,7 +3,22 @@ import User from './models/User.js';
 import Lead from './models/Lead.js';
 import Project from './models/Project.js';
 
-export async function createNotification({ userId, type, title, message, severity = 'info', relatedModel, relatedId, route, expiresAt }) {
+export async function createNotification({ userId, type, title, message, severity = 'info', relatedModel, relatedId, route, expiresAt, combine = false }) {
+  if (combine) {
+    // Combine mode: merge into any unread notification of the same
+    // {userId, type} regardless of relatedId — used for high-volume periodic
+    // notifications (e.g. "3 leads expiring soon") where a separate row per
+    // relatedId would flood the notification center. Shows the most recent
+    // occurrence's title/message with a running count instead.
+    const existing = await Notification.findOneAndUpdate(
+      { userId, type, read: false },
+      { $set: { title, message, severity, relatedModel, relatedId, route, expiresAt }, $inc: { count: 1 } },
+      { new: true },
+    );
+    if (existing) return existing;
+    return Notification.create({ userId, type, title, message, severity, relatedModel, relatedId, route, expiresAt });
+  }
+
   // Dedup: don't create if unread identical exists
   const existing = await Notification.findOne({ userId, type, relatedId, read: false });
   if (existing) return existing;
@@ -41,7 +56,8 @@ export async function generatePeriodicNotifications() {
       relatedModel: 'lead',
       relatedId: String(lead._id),
       route: '/crm',
-      expiresAt: new Date(lead.expectedCloseDate)
+      expiresAt: new Date(lead.expectedCloseDate),
+      combine: true
     });
   }
   // 2. Projects with hours > 90%
@@ -58,7 +74,8 @@ export async function generatePeriodicNotifications() {
         severity: 'warning',
         relatedModel: 'project',
         relatedId: String(p._id),
-        route: '/projects'
+        route: '/projects',
+        combine: true
       });
     }
   }
