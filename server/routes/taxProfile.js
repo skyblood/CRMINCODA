@@ -34,6 +34,9 @@ router.put('/me', async (req, res) => {
   if (digits.length !== 9) {
     return res.status(400).json({ error: 'TIN must be 9 digits' });
   }
+  if (tinType !== 'SSN' && tinType !== 'EIN') {
+    return res.status(400).json({ error: 'tinType must be SSN or EIN' });
+  }
 
   const user = await User.findOne({ id: req.session.user.id });
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -42,7 +45,7 @@ router.put('/me', async (req, res) => {
     legalName: legalName || '',
     tinEncrypted: encrypt(digits),
     tinLast4: digits.slice(-4),
-    tinType: tinType === 'EIN' ? 'EIN' : 'SSN',
+    tinType,
     address: address || {},
     w9SubmittedAt: new Date(),
   };

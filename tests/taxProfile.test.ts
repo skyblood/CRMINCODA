@@ -68,6 +68,24 @@ describe('PUT /api/tax-profile/me', () => {
     assert.equal(res.status, 400);
   });
 
+  it('rejects an invalid tinType instead of silently defaulting to SSN', async () => {
+    await User.create({ id: 'user-bob', name: 'Bob', email: 'bob@example.com', role: 'consultant' });
+    const app = buildApp({ id: 'user-bob', role: 'consultant' });
+
+    const lowercaseRes = await request(app).put('/api/tax-profile/me').send({
+      legalName: 'Bob Smith', tin: '123456789', tinType: 'ein', address: {},
+    });
+    assert.equal(lowercaseRes.status, 400);
+
+    const missingRes = await request(app).put('/api/tax-profile/me').send({
+      legalName: 'Bob Smith', tin: '123456789', address: {},
+    });
+    assert.equal(missingRes.status, 400);
+
+    const stored = await User.findOne({ id: 'user-bob' }).lean();
+    assert.ok(!stored.taxInfo?.tinEncrypted, 'no write should have happened');
+  });
+
   it('requires an authenticated session', async () => {
     const app = buildApp(null);
     const res = await request(app).put('/api/tax-profile/me').send({ tin: '123456789' });
