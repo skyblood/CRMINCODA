@@ -88,6 +88,7 @@ import paymentsRouter from './routes/payments.js';
 import reportsRouter from './routes/reports.js';
 import commissionsRouter from './routes/commissions.js';
 import { startInvoiceScheduler, getSchedulerHealth } from './jobs/invoiceScheduler.js';
+import { startLeadEnrichmentScheduler } from './jobs/leadEnrichmentScheduler.js';
 import proposalTemplatesRouter from './routes/proposalTemplates.js';
 import aiReportsRouter from './routes/aiReports.js';
 import backupRouter from './routes/backup.js';
@@ -444,6 +445,7 @@ const start = async () => {
     scheduleMonthlyReport();
     schedulePeriodicNotifications();
     startInvoiceScheduler();
+    startLeadEnrichmentScheduler();
 };
 
 // Start server

@@ -47,6 +47,18 @@ const LeadSchema = new mongoose.Schema({
     suppressCollectionReminders: { type: Boolean, default: false },
     suppressCollectionReason: String,
     suppressCollectionUntil: Date,
+    enrichment: {
+        domain:          { type: String, default: '' },
+        title:           { type: String, default: '' },
+        metaDescription: { type: String, default: '' },
+        ogSiteName:      { type: String, default: '' },
+        industryGuess:   { type: String, default: '' },
+        enrichedAt:      { type: Date, default: null },
+        status: {
+            type: String,
+            enum: ['enriched', 'failed', 'skipped_free_domain'],
+        },
+    },
 }, { timestamps: true, strict: false });
 
 LeadSchema.index({ stage: 1, createdAt: -1 });
