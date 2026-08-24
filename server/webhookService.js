@@ -1,6 +1,8 @@
 import crypto from 'crypto';
+import cron from 'node-cron';
 import Webhook from './models/Webhook.js';
 import WebhookLog from './models/WebhookLog.js';
+import { decrypt } from './utils/encryption.js';
 
 async function sendWebhook(webhook, eventType, data, triggeredBy, attempt = 1) {
   const payload = JSON.stringify({
@@ -17,7 +19,7 @@ async function sendWebhook(webhook, eventType, data, triggeredBy, attempt = 1) {
   };
 
   if (webhook.secret) {
-    const hmac = crypto.createHmac('sha256', webhook.secret).update(payload).digest('hex');
+    const hmac = crypto.createHmac('sha256', decrypt(webhook.secret)).update(payload).digest('hex');
     headers['X-Incoda-Signature'] = `sha256=${hmac}`;
   }
 
@@ -124,4 +126,17 @@ export async function dispatchWebhooks(eventType, data, triggeredBy) {
   } catch (e) {
     console.error('[WebhookDispatch]', e.message);
   }
+}
+
+export async function runWebhookRetrySweep() {
+  try {
+    await resumePendingRetries();
+  } catch (e) {
+    console.error('[WebhookRetrySweep]', e.message);
+  }
+}
+
+export function startWebhookRetrySweep() {
+  cron.schedule('*/2 * * * *', runWebhookRetrySweep, { timezone: 'America/Bogota' });
+  console.log('[WebhookRetrySweep] Scheduled every 2 minutes');
 }

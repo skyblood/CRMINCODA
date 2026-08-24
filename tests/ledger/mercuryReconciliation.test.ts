@@ -63,6 +63,43 @@ describe('POST /api/mercury-import', () => {
     const res = await request(app).post('/api/mercury-import').send({ csv });
     assert.equal(res.body.unmatched.length, 0);
   });
+
+  it('offers a close-but-not-exact bank row / ledger line pair as a suggestion instead of missing/unmatched', async () => {
+    await JournalEntry.create({
+        date: new Date('2026-07-01'), memo: 'AWS Hosting', source: 'expense',
+        lines: [
+            { accountId: 'coa_6300', debit: 500, amountUSD: 500 },
+            { accountId: 'coa_1000', credit: 500, amountUSD: 500 },
+        ],
+    });
+    // Same day, amount off by $1 (0.2% — within the 1% tight band) and shares the "AWS Hosting" memo tokens.
+    const csv = 'Date,Description,Amount\n2026-07-01,AWS Hosting Invoice,-501.00\n';
+    const res = await request(app).post('/api/mercury-import').send({ csv });
+
+    assert.equal(res.body.matched.length, 0);
+    assert.equal(res.body.missing.length, 0);
+    assert.equal(res.body.unmatched.length, 0);
+    assert.equal(res.body.suggested.length, 1);
+    assert.ok(res.body.suggested[0].confidence >= 0.8);
+    assert.ok(res.body.suggested[0].journalEntryId);
+    assert.equal(res.body.suggested[0].lineIndex, 1);
+  });
+
+  it('leaves a genuinely unrelated bank row / ledger line pair in missing and unmatched, not suggested', async () => {
+    await JournalEntry.create({
+        date: new Date('2026-01-01'), memo: 'Office rent', source: 'expense',
+        lines: [
+            { accountId: 'coa_6300', debit: 200, amountUSD: 200 },
+            { accountId: 'coa_1000', credit: 200, amountUSD: 200 },
+        ],
+    });
+    const csv = 'Date,Description,Amount\n2026-07-01,Totally unrelated fee,-9999.00\n';
+    const res = await request(app).post('/api/mercury-import').send({ csv });
+
+    assert.equal(res.body.suggested.length, 0);
+    assert.equal(res.body.missing.length, 1);
+    assert.equal(res.body.unmatched.length, 1);
+  });
 });
 
 describe('POST /api/mercury-import/confirm-match', () => {

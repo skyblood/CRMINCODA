@@ -1,8 +1,10 @@
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDB, teardownTestDB, clearLedgerCollections, seedChartOfAccounts } from './setup.js';
 import { postExpense, postConsultantPayment, postPaymentReceived, postCommissionPaid } from '../../server/services/ledgerPostingService.js';
 import JournalEntry from '../../server/models/JournalEntry.js';
+import User from '../../server/models/User.js';
+import Notification from '../../server/models/Notification.js';
 
 before(setupTestDB);
 after(teardownTestDB);
@@ -125,5 +127,60 @@ describe('postCommissionPaid', () => {
     const cash = entry.lines.find(l => l.accountId === 'coa_1000');
     assert.equal(labor.debit, 1110);
     assert.equal(cash.credit, 1110);
+  });
+});
+
+describe('postConsultantPayment — backup withholding warning', () => {
+  beforeEach(async () => {
+    await User.deleteMany({});
+    await Notification.deleteMany({});
+  });
+
+  it('notifies admins when the paid consultant has no TIN on file', async () => {
+    await User.create({ id: 'admin-1', name: 'Admin One', email: 'admin@incoda.com', role: 'admin', permissions: { admin: true } });
+    await User.create({ id: 'user-bob', name: 'Bob Consultant', email: 'bob@example.com', role: 'consultant' });
+
+    await postConsultantPayment({
+      id: 'tx_20', title: 'Bob payout', amount: 1000, amountUSD: 1000, currency: 'USD',
+      exchangeRateToUSD: 1, category: 'consultant_payment', consultantId: 'user-bob', date: '2026-07-01',
+    });
+
+    const warning = await Notification.findOne({ type: 'backup_withholding_risk', userId: 'admin-1' });
+    assert.ok(warning, 'expected the admin to be notified about the missing W-9');
+    assert.equal(warning.severity, 'critical');
+  });
+
+  it('does not notify when the consultant already has a TIN on file', async () => {
+    await User.create({ id: 'admin-1', name: 'Admin One', email: 'admin@incoda.com', role: 'admin', permissions: { admin: true } });
+    await User.create({
+      id: 'user-alice', name: 'Alice Consultant', email: 'alice@example.com', role: 'consultant',
+      taxInfo: { tinEncrypted: 'already-set', tinLast4: '1234', tinType: 'SSN' },
+    });
+
+    await postConsultantPayment({
+      id: 'tx_21', title: 'Alice payout', amount: 1000, amountUSD: 1000, currency: 'USD',
+      exchangeRateToUSD: 1, category: 'consultant_payment', consultantId: 'user-alice', date: '2026-07-01',
+    });
+
+    const warning = await Notification.findOne({ type: 'backup_withholding_risk', userId: 'admin-1' });
+    assert.equal(warning, null);
+  });
+
+  it('still posts the payment even when the tax-info lookup throws', async () => {
+    await User.create({ id: 'admin-1', name: 'Admin One', email: 'admin@incoda.com', role: 'admin', permissions: { admin: true } });
+    await User.create({ id: 'user-carl', name: 'Carl Consultant', email: 'carl@example.com', role: 'consultant' });
+
+    mock.method(User, 'findOne', () => { throw new Error('DB blip'); });
+    try {
+      const entry = await postConsultantPayment({
+        id: 'tx_22', title: 'Carl payout', amount: 1000, amountUSD: 1000, currency: 'USD',
+        exchangeRateToUSD: 1, category: 'consultant_payment', consultantId: 'user-carl', date: '2026-07-01',
+      });
+      assert.ok(entry, 'payment should still post despite the lookup failure');
+      const laborLine = entry.lines.find(l => l.debit === 1000);
+      assert.ok(laborLine, 'expected the Contract Labor debit line to be created');
+    } finally {
+      mock.restoreAll();
+    }
   });
 });

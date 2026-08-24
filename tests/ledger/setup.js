@@ -17,6 +17,11 @@ let mongoServer;
 export async function setupTestDB() {
   mongoServer = await MongoMemoryServer.create();
   await mongoose.connect(mongoServer.getUri());
+  // Ensure all registered models' indexes (including LedgerAccount's unique
+  // index on `code`) are built before any test runs. Without this, Mongoose's
+  // background autoIndex build can still be in flight when two racing
+  // .create() calls hit a unique constraint, letting a duplicate slip through.
+  await mongoose.connection.syncIndexes();
 }
 
 export async function teardownTestDB() {

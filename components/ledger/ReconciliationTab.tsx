@@ -1,10 +1,11 @@
 // components/ledger/ReconciliationTab.tsx
 import React, { useState } from 'react';
-import { Upload, CheckCircle, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Upload, CheckCircle, AlertTriangle, HelpCircle, Sparkles } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 
 type ImportResult = {
   matched: { bankRow: Record<string, string>; journalEntryId: string; lineIndex: number }[];
+  suggested: { bankRow: Record<string, string>; journalEntryId: string; lineIndex: number; confidence: number; reasons: string[] }[];
   unmatched: { journalEntryId: string; lineIndex: number; date: string; amount: number }[];
   missing: { bankRow: Record<string, string> }[];
   parseErrors: { row: number; message: string }[];
@@ -51,7 +52,11 @@ export function ReconciliationTab() {
       setError(body.error || 'No se pudo marcar la línea como conciliada.');
       return;
     }
-    setResult(r => r ? { ...r, unmatched: r.unmatched.filter(u => !(u.journalEntryId === journalEntryId && u.lineIndex === lineIndex)) } : r);
+    setResult(r => r ? {
+      ...r,
+      unmatched: r.unmatched.filter(u => !(u.journalEntryId === journalEntryId && u.lineIndex === lineIndex)),
+      suggested: r.suggested.filter(s => !(s.journalEntryId === journalEntryId && s.lineIndex === lineIndex)),
+    } : r);
   };
 
   return (
@@ -78,6 +83,22 @@ export function ReconciliationTab() {
             <h3 className="flex items-center gap-2 font-semibold text-green-700 mb-2"><CheckCircle size={16} /> Conciliadas ({result.matched.length})</h3>
             <p className="text-xs text-gray-500">Coinciden automáticamente por fecha y monto con un asiento existente.</p>
           </div>
+
+          {result.suggested.length > 0 && (
+            <div>
+              <h3 className="flex items-center gap-2 font-semibold text-purple-700 mb-2"><Sparkles size={16} /> Sugeridas ({result.suggested.length})</h3>
+              <p className="text-xs text-gray-500 mb-2">Coinciden parcialmente por monto, fecha y/o descripción — requieren confirmación manual.</p>
+              {result.suggested.map((s, i) => (
+                <div key={i} className="flex items-center justify-between text-sm border-b border-gray-100 py-2 gap-3">
+                  <div className="min-w-0">
+                    <div>{s.bankRow.Date} — {s.bankRow.Description} — ${s.bankRow.Amount}</div>
+                    <div className="text-[11px] text-gray-400 truncate">{Math.round(s.confidence * 100)}% de confianza · {s.reasons.join(', ')}</div>
+                  </div>
+                  <button onClick={() => confirmMatch(s.journalEntryId, s.lineIndex)} className="text-purple-700 text-xs whitespace-nowrap flex-shrink-0">Confirmar match</button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div>
             <h3 className="flex items-center gap-2 font-semibold text-amber-700 mb-2"><AlertTriangle size={16} /> Sin conciliar en el libro ({result.unmatched.length})</h3>

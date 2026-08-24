@@ -16,7 +16,7 @@ const {
 
 let transporter = null;
 
-const getTransporter = () => {
+export const getTransporter = () => {
     if (!SMTP_USER || !SMTP_PASSWORD) {
         console.warn('[Email] SMTP_USER / SMTP_PASSWORD not set — email notifications disabled.');
         return null;

@@ -2156,6 +2156,14 @@ export const CRMPipeline: React.FC<CRMPipelineProps> = ({ leads, templates, skuC
                                                 ⚡ {lead.aiNextAction}
                                             </span>
                                         )}
+                                        {lead.enrichment?.industryGuess && (
+                                            <span
+                                                className="flex-shrink-0 text-[10px] text-gray-600 bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5"
+                                                title={lead.enrichment.title || lead.enrichment.industryGuess}
+                                            >
+                                                {lead.enrichment.industryGuess}
+                                            </span>
+                                        )}
                                         <div className="flex-shrink-0 flex items-center gap-1 text-[10px] text-gray-400">
                                             <Mail size={10} />
                                             <span>{lead.interactions.length}</span>

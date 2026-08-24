@@ -41,6 +41,7 @@ import leadsRouter from './routes/leads.js';
 import { fieldFilter } from './middleware/fieldFilter.js';
 import projectsRouter from './routes/projects.js';
 import usersRouter from './routes/users.js';
+import taxProfileRouter from './routes/taxProfile.js';
 import templatesRouter from './routes/templates.js';
 import skusRouter from './routes/skus.js';
 import transactionsRouter from './routes/transactions.js';
@@ -61,14 +62,17 @@ import mercuryReconciliationRouter from './routes/mercuryReconciliation.js';
 import { ensureChartOfAccountsSeeded } from './seed/chartOfAccounts.js';
 import { ensureFinancePermissionBackfilled } from './seed/userPermissions.js';
 import { ensureCommissionIdsBackfilled } from './seed/commissionIds.js';
+import { ensureWebhookSecretsEncrypted } from './seed/webhookSecrets.js';
+import healthRouter from './routes/health.js';
 import apiKeysRouter from './routes/apiKeys.js';
 import externalRouter from './routes/external.js';
 import searchRouter from './routes/search.js';
 import exportRouter from './routes/export.js';
 import webhooksRouter from './routes/webhooks.js';
-import { resumePendingRetries } from './webhookService.js';
+import { resumePendingRetries, startWebhookRetrySweep } from './webhookService.js';
 import notificationsRouter from './routes/notifications.js';
 import aiScoreRouter from './routes/aiScore.js';
+import leadEnrichmentRouter from './routes/leadEnrichment.js';
 import auditLogsRouter from './routes/auditLogs.js';
 import analyticsRouter from './routes/analytics.js';
 import userGoalsRouter from './routes/userGoals.js';
@@ -87,6 +91,7 @@ import paymentsRouter from './routes/payments.js';
 import reportsRouter from './routes/reports.js';
 import commissionsRouter from './routes/commissions.js';
 import { startInvoiceScheduler, getSchedulerHealth } from './jobs/invoiceScheduler.js';
+import { startLeadEnrichmentScheduler } from './jobs/leadEnrichmentScheduler.js';
 import proposalTemplatesRouter from './routes/proposalTemplates.js';
 import aiReportsRouter from './routes/aiReports.js';
 import backupRouter from './routes/backup.js';
@@ -246,6 +251,7 @@ app.use(requireAuth);
 app.use('/api/leads', fieldFilter('leads'), leadsRouter);
 app.use('/api/projects', fieldFilter('projects'), projectsRouter);
 app.use('/api/users', fieldFilter('users'), usersRouter);
+app.use('/api/tax-profile', taxProfileRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/skus', skusRouter);
 app.use('/api/transactions', transactionsRouter);
@@ -269,6 +275,7 @@ app.use('/api/export', exportRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/leads', aiScoreRouter);
+app.use('/api/leads', leadEnrichmentRouter);
 app.use('/api/audit-logs', auditLogsRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/user-goals', userGoalsRouter);
@@ -331,10 +338,7 @@ app.put('/api/settings', async (req, res) => {
     }
 });
 
-// Health check
-app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
-});
+app.use('/api/health', healthRouter);
 
 // ==================== STATIC FRONTEND (production) ====================
 const distPath = join(__dirname, '..', 'dist');
@@ -417,7 +421,9 @@ const start = async () => {
     await ensureChartOfAccountsSeeded().catch(e => console.error('[startup] chart of accounts seed failed:', e.message));
     await ensureFinancePermissionBackfilled().catch(e => console.error('[startup] finance permission backfill failed:', e.message));
     await ensureCommissionIdsBackfilled().catch(e => console.error('[startup] commission id backfill failed:', e.message));
+    await ensureWebhookSecretsEncrypted().catch(e => console.error('[startup] webhook secret encryption backfill failed:', e.message));
     resumePendingRetries().catch(e => console.error('[startup] webhook resume failed:', e.message));
+    startWebhookRetrySweep();
 
     const hasCerts = existsSync(CERT_PATH) && existsSync(KEY_PATH);
     if (hasCerts) {
@@ -441,6 +447,7 @@ const start = async () => {
     scheduleMonthlyReport();
     schedulePeriodicNotifications();
     startInvoiceScheduler();
+    startLeadEnrichmentScheduler();
 };
 
 // Start server

@@ -11,6 +11,7 @@ const NotificationSchema = new mongoose.Schema({
   read: { type: Boolean, default: false, index: true },
   readAt: Date,
   dismissed: { type: Boolean, default: false },
+  count: { type: Number, default: 1 },
   expiresAt: Date,
   createdAt: { type: Date, default: Date.now, index: true }
 }, { timestamps: { createdAt: false, updatedAt: 'updatedAt' } });

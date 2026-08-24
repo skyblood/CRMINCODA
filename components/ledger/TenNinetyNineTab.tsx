@@ -21,19 +21,35 @@ export function TenNinetyNineTab() {
         Suma de pagos a contratistas (cuenta Contract Labor) por año. No presenta el 1099 ante el IRS —
         usa estos datos con un CPA o un servicio de e-filing (Track1099, IRS FIRE).
       </p>
-      <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="border border-gray-300 rounded-lg p-2 text-sm mb-4 w-28" />
+      <div className="flex items-center gap-3 mb-4">
+        <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="border border-gray-300 rounded-lg p-2 text-sm w-28" />
+        <a
+          href={`/api/ledger-reports/1099/export?year=${year}`}
+          className="bg-gray-900 text-white text-sm rounded-lg px-4 py-2"
+        >
+          Exportar CSV
+        </a>
+      </div>
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-gray-500 border-b border-gray-200">
-            <th className="py-2 pr-4">Contratista</th><th className="py-2 pr-4">Total Pagado (USD)</th><th className="py-2 pr-4">¿Cruza $600?</th>
+            <th className="py-2 pr-4">Contratista</th>
+            <th className="py-2 pr-4">Total Pagado (USD)</th>
+            <th className="py-2 pr-4">¿Cruza $600?</th>
+            <th className="py-2 pr-4">W-9</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(r => (
             <tr key={r.entityId} className="border-b border-gray-100">
-              <td className="py-2 pr-4">{r.entityId}</td>
+              <td className="py-2 pr-4">{r.name}</td>
               <td className="py-2 pr-4">${r.totalUSD.toLocaleString()}</td>
               <td className="py-2 pr-4">{r.crossesThreshold ? <span className="text-amber-700 font-medium">Sí — requiere 1099-NEC</span> : 'No'}</td>
+              <td className="py-2 pr-4">
+                {r.hasTIN
+                  ? <span className="text-green-700">✓</span>
+                  : <span className="text-red-700 font-medium">Sin W-9</span>}
+              </td>
             </tr>
           ))}
         </tbody>

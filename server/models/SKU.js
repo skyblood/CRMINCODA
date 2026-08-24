@@ -15,4 +15,6 @@ const SKUSchema = new mongoose.Schema({
     costLastUpdatedBy: { type: String }  // userId
 }, { timestamps: true, strict: false });
 
+SKUSchema.index({ code: 'text', name: 'text', description: 'text' });
+
 export default mongoose.model('SKU', SKUSchema);

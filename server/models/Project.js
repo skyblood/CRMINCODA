@@ -24,5 +24,6 @@ const ProjectSchema = new mongoose.Schema({
 
 ProjectSchema.index({ leadId: 1 });
 ProjectSchema.index({ status: 1, createdAt: -1 });
+ProjectSchema.index({ name: 'text', clientName: 'text' });
 
 export default mongoose.model('Project', ProjectSchema);
