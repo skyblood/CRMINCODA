@@ -62,6 +62,8 @@ import mercuryReconciliationRouter from './routes/mercuryReconciliation.js';
 import { ensureChartOfAccountsSeeded } from './seed/chartOfAccounts.js';
 import { ensureFinancePermissionBackfilled } from './seed/userPermissions.js';
 import { ensureCommissionIdsBackfilled } from './seed/commissionIds.js';
+import { ensureWebhookSecretsEncrypted } from './seed/webhookSecrets.js';
+import healthRouter from './routes/health.js';
 import apiKeysRouter from './routes/apiKeys.js';
 import externalRouter from './routes/external.js';
 import searchRouter from './routes/search.js';
@@ -336,10 +338,7 @@ app.put('/api/settings', async (req, res) => {
     }
 });
 
-// Health check
-app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
-});
+app.use('/api/health', healthRouter);
 
 // ==================== STATIC FRONTEND (production) ====================
 const distPath = join(__dirname, '..', 'dist');
@@ -422,6 +421,7 @@ const start = async () => {
     await ensureChartOfAccountsSeeded().catch(e => console.error('[startup] chart of accounts seed failed:', e.message));
     await ensureFinancePermissionBackfilled().catch(e => console.error('[startup] finance permission backfill failed:', e.message));
     await ensureCommissionIdsBackfilled().catch(e => console.error('[startup] commission id backfill failed:', e.message));
+    await ensureWebhookSecretsEncrypted().catch(e => console.error('[startup] webhook secret encryption backfill failed:', e.message));
     resumePendingRetries().catch(e => console.error('[startup] webhook resume failed:', e.message));
     startWebhookRetrySweep();
 

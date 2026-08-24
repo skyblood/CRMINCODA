@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import cron from 'node-cron';
 import Webhook from './models/Webhook.js';
 import WebhookLog from './models/WebhookLog.js';
+import { decrypt } from './utils/encryption.js';
 
 async function sendWebhook(webhook, eventType, data, triggeredBy, attempt = 1) {
   const payload = JSON.stringify({
@@ -18,7 +19,7 @@ async function sendWebhook(webhook, eventType, data, triggeredBy, attempt = 1) {
   };
 
   if (webhook.secret) {
-    const hmac = crypto.createHmac('sha256', webhook.secret).update(payload).digest('hex');
+    const hmac = crypto.createHmac('sha256', decrypt(webhook.secret)).update(payload).digest('hex');
     headers['X-Incoda-Signature'] = `sha256=${hmac}`;
   }
 

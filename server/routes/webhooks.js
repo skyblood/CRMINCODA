@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import Webhook from '../models/Webhook.js';
 import WebhookLog from '../models/WebhookLog.js';
+import { encrypt, decrypt } from '../utils/encryption.js';
 
 const router = Router();
 
@@ -10,10 +11,13 @@ router.use((req, res, next) => {
   next();
 });
 
-// GET / — list all webhooks
+// GET / — list all webhooks (secret decrypted — admins need to read/copy it)
 router.get('/', async (_req, res) => {
   try {
     const webhooks = await Webhook.find().lean();
+    for (const webhook of webhooks) {
+      if (webhook.secret) webhook.secret = decrypt(webhook.secret);
+    }
     res.json(webhooks);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -23,12 +27,13 @@ router.get('/', async (_req, res) => {
 // POST / — create webhook
 router.post('/', async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, secret } = req.body;
     if (!url || !url.startsWith('https://')) {
       return res.status(400).json({ error: 'URL must start with https://' });
     }
     const webhook = await Webhook.create({
       ...req.body,
+      secret: secret ? encrypt(secret) : secret,
       createdBy: req.session.user?.email || req.session.user?.id
     });
     res.status(201).json(webhook);
@@ -40,11 +45,13 @@ router.post('/', async (req, res) => {
 // PUT /:id — update webhook
 router.put('/:id', async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, secret } = req.body;
     if (url && !url.startsWith('https://')) {
       return res.status(400).json({ error: 'URL must start with https://' });
     }
-    const webhook = await Webhook.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true, lean: true });
+    const update = { ...req.body };
+    if (secret) update.secret = encrypt(secret);
+    const webhook = await Webhook.findByIdAndUpdate(req.params.id, { $set: update }, { new: true, lean: true });
     if (!webhook) return res.status(404).json({ error: 'Not found' });
     res.json(webhook);
   } catch (err) {

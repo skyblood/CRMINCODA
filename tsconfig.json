@@ -35,7 +35,9 @@
     "tests/fieldFilter.test.ts",
     "tests/leadEnrichmentService.test.ts",
     "tests/leadEnrichmentScheduler.test.ts",
-    "tests/leadEnrichmentRoute.test.ts"
+    "tests/leadEnrichmentRoute.test.ts",
+    "tests/webhookSecrets.test.ts",
+    "tests/health.test.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
