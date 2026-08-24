@@ -1,4 +1,4 @@
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
@@ -91,6 +91,36 @@ describe('PUT /api/tax-profile/me', () => {
     const res = await request(app).put('/api/tax-profile/me').send({ tin: '123456789' });
     assert.equal(res.status, 401);
   });
+
+  it('returns 500 (and does not crash the process) when an internal error occurs after validation passes', async () => {
+    await User.create({ id: 'user-bob', name: 'Bob', email: 'bob@example.com', role: 'consultant' });
+    const app = buildApp({ id: 'user-bob', role: 'consultant' });
+
+    mock.method(User, 'findOne', () => { throw new Error('simulated DB failure'); });
+    try {
+      const res = await request(app).put('/api/tax-profile/me').send({
+        legalName: 'Bob Smith', tin: '123456789', tinType: 'SSN', address: {},
+      });
+      assert.equal(res.status, 500);
+    } finally {
+      mock.restoreAll();
+    }
+  });
+});
+
+describe('GET /api/tax-profile/me', () => {
+  it('returns 500 (and does not crash the process) when an internal error occurs', async () => {
+    await User.create({ id: 'user-bob', name: 'Bob', email: 'bob@example.com', role: 'consultant' });
+    const app = buildApp({ id: 'user-bob', role: 'consultant' });
+
+    mock.method(User, 'findOne', () => { throw new Error('simulated DB failure'); });
+    try {
+      const res = await request(app).get('/api/tax-profile/me');
+      assert.equal(res.status, 500);
+    } finally {
+      mock.restoreAll();
+    }
+  });
 });
 
 describe('GET /api/tax-profile/admin/:userId', () => {
@@ -114,5 +144,18 @@ describe('GET /api/tax-profile/admin/:userId', () => {
 
     const res = await request(salesApp).get('/api/tax-profile/admin/user-bob');
     assert.equal(res.status, 403);
+  });
+
+  it('returns 500 (and does not crash the process) when an internal error occurs for an authorized caller', async () => {
+    await User.create({ id: 'user-bob', name: 'Bob', email: 'bob@example.com', role: 'consultant' });
+    const adminApp = buildApp({ id: 'user-admin', role: 'admin', permissions: { admin: true } });
+
+    mock.method(User, 'findOne', () => { throw new Error('simulated DB failure'); });
+    try {
+      const res = await request(adminApp).get('/api/tax-profile/admin/user-bob');
+      assert.equal(res.status, 500);
+    } finally {
+      mock.restoreAll();
+    }
   });
 });
