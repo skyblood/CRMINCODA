@@ -60,4 +60,45 @@ describe('runNightlyEnrichmentJob', () => {
     await runNightlyEnrichmentJob(); // should not throw
     mock.restoreAll();
   });
+
+  it('isolates a per-lead failure: one lead throwing on save does not stop later leads in the batch', async () => {
+    mock.method(globalThis, 'fetch', async () => ({
+      ok: true,
+      status: 200,
+      body: { getReader: () => {
+        let sent = false;
+        return { read: async () => {
+          if (sent) return { done: true, value: undefined };
+          sent = true;
+          return { done: false, value: new TextEncoder().encode('<title>Acme</title>') };
+        }, cancel: async () => {} };
+      } },
+    }));
+
+    // Fail save() only for the specific lead we designate to blow up, regardless
+    // of the order Lead.find() returns documents in.
+    const originalSave = Lead.prototype.save;
+    mock.method(Lead.prototype, 'save', function (...args) {
+      if (this.id === 'lead_will_fail') {
+        return Promise.reject(new Error('Simulated save failure'));
+      }
+      return originalSave.apply(this, args);
+    });
+
+    await Lead.create({ id: 'lead_will_fail', companyName: 'Failco', contactName: 'Fay', email: 'fay@failco.com' });
+    await Lead.create({ id: 'lead_should_still_process', companyName: 'Okco', contactName: 'Ollie', email: 'ollie@okco.com' });
+
+    await runNightlyEnrichmentJob(); // must not throw / abort despite the mid-batch save failure
+
+    const failed = await Lead.findOne({ id: 'lead_will_fail' }).lean();
+    const stillProcessed = await Lead.findOne({ id: 'lead_should_still_process' }).lean();
+
+    // The failing lead's save() rejected, so its enrichment was never persisted.
+    assert.ok(!failed.enrichment || !failed.enrichment.status);
+    // The other lead in the batch must still have been processed.
+    assert.equal(stillProcessed.enrichment.status, 'enriched');
+    assert.equal(stillProcessed.enrichment.domain, 'okco.com');
+
+    mock.restoreAll();
+  });
 });
