@@ -66,7 +66,7 @@ import externalRouter from './routes/external.js';
 import searchRouter from './routes/search.js';
 import exportRouter from './routes/export.js';
 import webhooksRouter from './routes/webhooks.js';
-import { resumePendingRetries } from './webhookService.js';
+import { resumePendingRetries, startWebhookRetrySweep } from './webhookService.js';
 import notificationsRouter from './routes/notifications.js';
 import aiScoreRouter from './routes/aiScore.js';
 import auditLogsRouter from './routes/auditLogs.js';
@@ -418,6 +418,7 @@ const start = async () => {
     await ensureFinancePermissionBackfilled().catch(e => console.error('[startup] finance permission backfill failed:', e.message));
     await ensureCommissionIdsBackfilled().catch(e => console.error('[startup] commission id backfill failed:', e.message));
     resumePendingRetries().catch(e => console.error('[startup] webhook resume failed:', e.message));
+    startWebhookRetrySweep();
 
     const hasCerts = existsSync(CERT_PATH) && existsSync(KEY_PATH);
     if (hasCerts) {

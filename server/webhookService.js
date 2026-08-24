@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import cron from 'node-cron';
 import Webhook from './models/Webhook.js';
 import WebhookLog from './models/WebhookLog.js';
 
@@ -124,4 +125,17 @@ export async function dispatchWebhooks(eventType, data, triggeredBy) {
   } catch (e) {
     console.error('[WebhookDispatch]', e.message);
   }
+}
+
+export async function runWebhookRetrySweep() {
+  try {
+    await resumePendingRetries();
+  } catch (e) {
+    console.error('[WebhookRetrySweep]', e.message);
+  }
+}
+
+export function startWebhookRetrySweep() {
+  cron.schedule('*/2 * * * *', runWebhookRetrySweep, { timezone: 'America/Bogota' });
+  console.log('[WebhookRetrySweep] Scheduled every 2 minutes');
 }
