@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
 import { setupTestDB, teardownTestDB, clearLedgerCollections, seedChartOfAccounts } from './setup.js';
-import mercuryReconciliationRouter from '../../server/routes/mercuryReconciliation.js';
+import mercuryReconciliationRouter, { createMercuryReconciliationRouter } from '../../server/routes/mercuryReconciliation.js';
 import JournalEntry from '../../server/models/JournalEntry.js';
+import MercuryTransaction from '../../server/models/MercuryTransaction.js';
 
 const app = express();
 app.use(express.json());
@@ -160,5 +161,89 @@ describe('POST /api/mercury-import/confirm-match', () => {
 
     assert.equal(({}).reconciled, undefined);
     assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, 'reconciled'), false);
+  });
+});
+
+describe('GET /api/mercury-import/accounts', () => {
+  it('returns the accounts the injected Mercury client resolves', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListAccounts: async () => [{ id: 'acc_1', name: 'Checking', type: 'checking' }],
+    }));
+
+    const res = await request(testApp).get('/api/mercury-import/accounts');
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, [{ id: 'acc_1', name: 'Checking', type: 'checking' }]);
+  });
+
+  it('returns 502 when the Mercury client throws', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListAccounts: async () => { throw new Error('Mercury API /accounts failed: 401 unauthorized'); },
+    }));
+
+    const res = await request(testApp).get('/api/mercury-import/accounts');
+    assert.equal(res.status, 502);
+    assert.match(res.body.error, /Mercury API/);
+  });
+});
+
+describe('POST /api/mercury-import/sync', () => {
+  function buildApp(mercuryListTransactions: (...args: any[]) => Promise<any[]>) {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({ mercuryListTransactions }));
+    return testApp;
+  }
+
+  it('rejects a request with no accountId', async () => {
+    const testApp = buildApp(async () => []);
+    const res = await request(testApp).post('/api/mercury-import/sync').send({});
+    assert.equal(res.status, 400);
+  });
+
+  it('persists fetched transactions into MercuryTransaction and reconciles them like the CSV path', async () => {
+    await JournalEntry.create({
+        date: new Date('2026-07-01'), source: 'expense',
+        lines: [
+            { accountId: 'coa_6300', debit: 500, amountUSD: 500 },
+            { accountId: 'coa_1000', credit: 500, amountUSD: 500 },
+        ],
+    });
+    const testApp = buildApp(async () => [
+      { id: 'tx_1', amount: -500, status: 'sent', postedAt: '2026-07-01', description: 'AWS Hosting', counterpartyName: 'AWS' },
+    ]);
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1', start: '2026-07-01', end: '2026-07-31' });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.matched.length, 1);
+
+    const stored = await MercuryTransaction.find({ mercuryAccountId: 'acc_1' }).lean();
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].mercuryTransactionId, 'tx_1');
+    assert.equal(stored[0].amount, -500);
+  });
+
+  it('syncing an overlapping range twice does not duplicate persisted transactions', async () => {
+    const fetchTx = [
+      { id: 'tx_1', amount: -25, status: 'sent', postedAt: '2026-07-01', description: 'Fee', counterpartyName: 'Bank' },
+    ];
+    const testApp = buildApp(async () => fetchTx);
+
+    await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+    await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    const stored = await MercuryTransaction.find({ mercuryAccountId: 'acc_1' }).lean();
+    assert.equal(stored.length, 1);
+  });
+
+  it('returns 502 when the Mercury client throws', async () => {
+    const testApp = buildApp(async () => { throw new Error('Mercury API /account/acc_1/transactions failed: 500'); });
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+    assert.equal(res.status, 502);
+    assert.match(res.body.error, /Mercury API/);
   });
 });
