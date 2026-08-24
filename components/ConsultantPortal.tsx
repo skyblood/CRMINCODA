@@ -1,8 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Project, TimeLog, Task, SubTask, User, SupportTicket, TicketPriority, TicketStatus } from '../types';
 import { Clock, Calendar, CheckCircle2, Briefcase, Plus, History, UserCheck, Circle, PlayCircle, List, CheckSquare, X, CheckCircle, BarChart2, LifeBuoy, ChevronDown, ChevronRight, AlertCircle, Edit2, Check, Users } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { apiFetch } from '../services/apiFetch';
 
 interface ConsultantPortalProps {
   projects: Project[];
@@ -59,6 +60,18 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({ projects, up
   const [subtaskLogTarget, setSubtaskLogTarget] = useState<{ taskId: string; subtaskId: string } | null>(null);
   const [subtaskLogForm, setSubtaskLogForm] = useState({ hours: 0, date: new Date().toISOString().split('T')[0], description: '' });
   const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
+
+  // Tax profile (Datos fiscales)
+  const [taxProfile, setTaxProfile] = useState<{ legalName: string; tinLast4: string; tinType: string; address: any; w9SubmittedAt: string | null } | null>(null);
+  const [taxForm, setTaxForm] = useState({ legalName: '', tin: '', tinType: 'SSN', line1: '', city: '', state: '', zip: '', country: 'US' });
+  const [taxSaving, setTaxSaving] = useState(false);
+  const [taxError, setTaxError] = useState('');
+
+  useEffect(() => {
+    apiFetch('/api/tax-profile/me').then(async (r) => {
+      if (r.ok) setTaxProfile(await r.json());
+    });
+  }, []);
 
   // Filter projects where the current user is in the team
   const myProjects = projects.filter(p => (p.team || []).includes(currentUser.name));
@@ -366,6 +379,32 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({ projects, up
     setShowTicketHoursModal(false);
     setTicketLogForm({ hours: 0, description: '', date: new Date().toISOString().split('T')[0] });
     setTicketForHours(null);
+  };
+
+  const submitTaxProfile = async () => {
+    setTaxSaving(true);
+    setTaxError('');
+    try {
+      const res = await apiFetch('/api/tax-profile/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          legalName: taxForm.legalName,
+          tin: taxForm.tin,
+          tinType: taxForm.tinType,
+          address: { line1: taxForm.line1, city: taxForm.city, state: taxForm.state, zip: taxForm.zip, country: taxForm.country },
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setTaxError(body.error || 'No se pudo guardar');
+        return;
+      }
+      setTaxProfile(await res.json());
+      setTaxForm(f => ({ ...f, tin: '' }));
+    } finally {
+      setTaxSaving(false);
+    }
   };
 
   const statusBadge = (status: string) => {
@@ -847,6 +886,48 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({ projects, up
           )}
         </div>
       )}
+
+      {/* Datos fiscales */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+        <h3 className="text-base font-semibold text-gray-900 mb-1">Datos fiscales</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Necesarios para tu 1099-NEC. Se guardan cifrados — nunca se muestran completos una vez guardados.
+        </p>
+        {taxProfile?.tinLast4 && (
+          <p className="text-sm text-gray-700 mb-3">
+            TIN actual: termina en <span className="font-mono">••••{taxProfile.tinLast4}</span>
+            {taxProfile.w9SubmittedAt && <> — actualizado el {new Date(taxProfile.w9SubmittedAt).toLocaleDateString()}</>}
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <input className="border border-gray-300 rounded-lg p-2 text-sm col-span-2" placeholder="Nombre legal"
+            value={taxForm.legalName} onChange={e => setTaxForm(f => ({ ...f, legalName: e.target.value }))} />
+          <input className="border border-gray-300 rounded-lg p-2 text-sm" type="password"
+            placeholder={taxProfile?.tinLast4 ? `Reemplazar TIN (termina en ${taxProfile.tinLast4})` : 'TIN (SSN o EIN, 9 dígitos)'}
+            value={taxForm.tin} onChange={e => setTaxForm(f => ({ ...f, tin: e.target.value }))} />
+          <select className="border border-gray-300 rounded-lg p-2 text-sm"
+            value={taxForm.tinType} onChange={e => setTaxForm(f => ({ ...f, tinType: e.target.value }))}>
+            <option value="SSN">SSN</option>
+            <option value="EIN">EIN</option>
+          </select>
+          <input className="border border-gray-300 rounded-lg p-2 text-sm col-span-2" placeholder="Dirección"
+            value={taxForm.line1} onChange={e => setTaxForm(f => ({ ...f, line1: e.target.value }))} />
+          <input className="border border-gray-300 rounded-lg p-2 text-sm" placeholder="Ciudad"
+            value={taxForm.city} onChange={e => setTaxForm(f => ({ ...f, city: e.target.value }))} />
+          <input className="border border-gray-300 rounded-lg p-2 text-sm" placeholder="Estado"
+            value={taxForm.state} onChange={e => setTaxForm(f => ({ ...f, state: e.target.value }))} />
+          <input className="border border-gray-300 rounded-lg p-2 text-sm" placeholder="Zip"
+            value={taxForm.zip} onChange={e => setTaxForm(f => ({ ...f, zip: e.target.value }))} />
+        </div>
+        {taxError && <p className="text-xs text-red-600 mt-2">{taxError}</p>}
+        <button
+          onClick={submitTaxProfile}
+          disabled={taxSaving}
+          className="mt-4 bg-gray-900 text-white text-sm rounded-lg px-4 py-2 disabled:opacity-50"
+        >
+          {taxSaving ? 'Guardando…' : 'Guardar datos fiscales'}
+        </button>
+      </div>
 
       {/* New Task Modal */}
       {showNewTaskModal && (
