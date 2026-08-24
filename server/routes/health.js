@@ -77,11 +77,28 @@ export function _resetHealthCache() {
   cache = null;
 }
 
-router.get('/', async (_req, res) => {
+// This endpoint is intentionally unauthenticated (external uptime monitors
+// and load balancers need to probe it without credentials), but a check's
+// `error` field can carry internal details (e.g. an SMTP server's auth
+// failure response) that shouldn't be handed to an anonymous caller. Public
+// callers get status/healthy/configured/tier only; an authenticated admin
+// gets the full detail for debugging.
+export function redactForPublic(result) {
+  const checks = {};
+  for (const [key, check] of Object.entries(result.checks)) {
+    const { error, ...rest } = check;
+    checks[key] = rest;
+  }
+  return { ...result, checks };
+}
+
+router.get('/', async (req, res) => {
+  const isAdmin = !!req.session?.user?.permissions?.admin;
   try {
-    res.json(await getHealthWithCache());
+    const result = await getHealthWithCache();
+    res.json(isAdmin ? result : redactForPublic(result));
   } catch (err) {
-    res.status(500).json({ status: 'error', error: err.message });
+    res.status(500).json(isAdmin ? { status: 'error', error: err.message } : { status: 'error' });
   }
 });
 
