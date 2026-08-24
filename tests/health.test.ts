@@ -11,6 +11,7 @@ import healthRouter, {
   checkMongo,
   runChecks,
   getHealthWithCache,
+  redactForPublic,
   _resetHealthCache,
 } from '../server/routes/health.js';
 
@@ -117,12 +118,33 @@ describe('getHealthWithCache', () => {
   });
 });
 
-describe('GET /api/health (route smoke test)', () => {
-  it('returns the expected JSON shape end-to-end', async () => {
-    const app = express();
-    app.use('/api/health', healthRouter);
+describe('redactForPublic', () => {
+  it('strips the error field from an unhealthy check', () => {
+    const result = { status: 'degraded', timestamp: 'x', checks: {
+      mongo: { healthy: true, latencyMs: 0, tier: 'critical' },
+      smtp: { configured: true, healthy: false, latencyMs: 1, tier: 'optional', error: 'Invalid login: secret internal detail' },
+      anthropic: { configured: false, healthy: null, latencyMs: 0, tier: 'optional' },
+    } };
 
-    const res = await request(app).get('/api/health');
+    const redacted = redactForPublic(result);
+
+    assert.equal(redacted.status, 'degraded');
+    assert.equal(redacted.checks.smtp.healthy, false);
+    assert.equal(redacted.checks.smtp.configured, true);
+    assert.equal(redacted.checks.smtp.error, undefined);
+  });
+});
+
+describe('GET /api/health (route smoke test)', () => {
+  function buildApp(sessionUser) {
+    const app = express();
+    app.use((req, _res, next) => { req.session = sessionUser ? { user: sessionUser } : undefined; next(); });
+    app.use('/api/health', healthRouter);
+    return app;
+  }
+
+  it('returns the expected JSON shape end-to-end', async () => {
+    const res = await request(buildApp(null)).get('/api/health');
 
     assert.equal(res.status, 200);
     assert.ok(['ok', 'degraded', 'down'].includes(res.body.status));
@@ -130,5 +152,29 @@ describe('GET /api/health (route smoke test)', () => {
     assert.ok(res.body.checks.smtp);
     assert.ok(res.body.checks.anthropic);
     assert.ok(res.body.timestamp);
+  });
+
+  it('does not leak an internal error message to an unauthenticated caller', async () => {
+    const res = await request(buildApp(null)).get('/api/health');
+
+    assert.equal(res.body.checks.smtp.error, undefined);
+    assert.equal(res.body.checks.mongo.error, undefined);
+    assert.equal(res.body.checks.anthropic.error, undefined);
+  });
+
+  it('hides a real check error from a non-admin caller but shows it to an admin', async () => {
+    // Pre-warm the module-level cache with a result that actually carries an
+    // error, via the same getHealthWithCache() the route itself calls — this
+    // is the only way to get a real error into the route's response, since
+    // the route always calls getHealthWithCache() with no overrides.
+    await getHealthWithCache({
+      smtpProbe: () => checkSmtp(() => ({ verify: async () => { throw new Error('super secret smtp detail'); } })),
+    });
+
+    const nonAdminRes = await request(buildApp({ permissions: { admin: false } })).get('/api/health');
+    const adminRes = await request(buildApp({ permissions: { admin: true } })).get('/api/health');
+
+    assert.equal(nonAdminRes.body.checks.smtp.error, undefined);
+    assert.match(adminRes.body.checks.smtp.error, /super secret smtp detail/);
   });
 });
