@@ -115,10 +115,15 @@ taxInfo: {
 
 ### 3. Self-service routes — `server/routes/taxProfile.js`
 
-- `GET /api/users/me/tax-profile` — requires `req.session.user`. Returns
+Mounted at `/api/tax-profile` (its own top-level path, **not** nested under
+`/api/users`) — `server/index.js` mounts `usersRouter` with
+`fieldFilter('users')`, a middleware scoped to the generic CRUD shape that
+must not run against these routes.
+
+- `GET /api/tax-profile/me` — requires `req.session.user`. Returns
   `{ legalName, tinLast4, tinType, address, w9SubmittedAt }`. Never includes
   `tinEncrypted` or a decrypted TIN.
-- `PUT /api/users/me/tax-profile` — requires `req.session.user`. Body:
+- `PUT /api/tax-profile/me` — requires `req.session.user`. Body:
   `{ legalName, tin, tinType, address }`. Validates `tin` server-side:
   strip non-digits, require exactly 9 digits, else `400` with
   `{ error: 'TIN must be 9 digits' }`. On success: `tinEncrypted =
@@ -127,39 +132,55 @@ taxInfo: {
 
 ### 4. Admin/finance routes
 
-- `GET /api/admin/tax-profiles/:userId` — gated by
+- `GET /api/tax-profile/admin/:userId` — gated by
   `req.session.user?.permissions?.finance || req.session.user?.permissions?.admin`,
   else `403`. Returns the full decrypted profile (`tin` in the clear) for a
   single consultant — used when a CPA needs to look up one contractor.
 - `GET /api/ledger-reports/1099/export?year=` — same permission gate. Reuses
-  the existing aggregation query from `/1099`, then for each row looks up
-  the `User`, decrypts `tinEncrypted`, and streams a CSV with this header
-  row (Track1099 bulk-import column names):
+  the existing aggregation query from `/1099`, restricted to entityIds whose
+  yearly total already crosses the $600 threshold (this is a filing
+  artifact, meant to be handed to Track1099/a CPA — a row for someone who
+  hasn't crossed the threshold yet this year has nothing to file). The
+  broader "who's missing a W-9 regardless of threshold" worklist is what
+  the `/1099` GET endpoint's `hasTIN` field already covers in the UI (see
+  §6) — the CSV export and the on-screen report serve two different
+  purposes. Streams a CSV with this header row (Track1099 bulk-import
+  column names):
 
   ```
   Recipient Name,TIN,TIN Type,Address,City,State,Zip,Box1_NonemployeeComp
   ```
 
-  A row with no `taxInfo.tinEncrypted` on file still appears, with `TIN`
-  left blank and `Box1_NonemployeeComp` populated — so the export doubles as
-  the "who's missing a W-9" worklist, not just the ready-to-file rows.
+  A qualifying row with no `taxInfo.tinEncrypted` on file still appears,
+  with `TIN` left blank (rather than being silently dropped) so a missing
+  W-9 is visible in the filing artifact too, not just caught upstream.
 
 ### 5. Backup withholding warning — `server/services/ledgerPostingService.js`
 
-Inside `postCommissionPaid` (and any future function that debits the
-Contract Labor account `6100`), after resolving the `entityId`:
+Hooks `postConsultantPayment` specifically — **not** `postCommissionPaid`.
+`postCommissionPaid` posts a commission's total to Contract Labor with no
+`entityId` at all; its `split` (`bmRetainedUSD`/`fabianShareUSD`/
+`spencerShareUSD` in `Commission.js`) looks like an internal profit
+distribution among firm principals, not a payment to a single external
+1099 contractor — whether that split is even 1099-reportable (vs. an
+owner/equity distribution needing K-1/1099-DIV instead) is a business
+classification question outside this feature's scope, so `postCommissionPaid`
+is left untouched. `postConsultantPayment` is the function whose own
+docstring already says it's "the function the 1099 report depends on for
+its entityId aggregation" — that's the correct, and only, hook point.
+
+After resolving `tx.consultantId`:
 
 ```js
-const consultant = await mongoose.model('User').findOne({ id: entityId }).lean();
+const consultant = await User.findOne({ id: consultantId }).lean();
 if (!consultant?.taxInfo?.tinEncrypted) {
-  const { notifyAdmins } = await import('../notificationService.js');
   notifyAdmins({
     type: 'backup_withholding_risk',
-    title: `⚠ Pago sin W-9: ${consultant?.name || entityId}`,
+    title: `⚠ Pago sin W-9: ${consultant?.name || consultantId}`,
     message: `Se pagó Contract Labor sin TIN en archivo. El IRS exige retención de respaldo del 24% sobre pagos a contratistas sin W-9.`,
-    severity: 'error',
+    severity: 'critical', // Notification.severity enum is 'info'|'warning'|'critical' — NOT 'error'
     relatedModel: 'user',
-    relatedId: entityId,
+    relatedId: consultantId,
     route: '/settings/users',
   }).catch(() => {});
 }
@@ -179,7 +200,7 @@ automate).
   if `tinLast4` already exists, show `"Termina en ••••1234 — reemplazar"`
   as a placeholder/label instead of pre-filling anything), TIN type
   (SSN/EIN radio), address fields. Submits to
-  `PUT /api/users/me/tax-profile`.
+  `PUT /api/tax-profile/me`.
 - **`TenNinetyNineTab.tsx`** — resolve `entityId` to consultant name (new
   field `name` added server-side to each row in the `/1099` response, via a
   batch `User.find({ id: { $in: entityIds } })` lookup), add a "Sin W-9"
@@ -191,7 +212,7 @@ automate).
 1. Consultant opens ConsultantPortal → "Datos fiscales" → fills form → `PUT
    tax-profile` → server validates TIN format → encrypts → stores
    `tinEncrypted` + `tinLast4` + `w9SubmittedAt` on their `User` doc.
-2. A commission is paid → `postCommissionPaid` debits Contract Labor,
+2. A consultant is paid → `postConsultantPayment` debits Contract Labor,
    credits Cash, with `entityId` = the consultant's `id` → checks
    `taxInfo.tinEncrypted` → if missing, notifies admins.
 3. Admin/finance opens `TenNinetyNineTab` in January → sees resolved names,
@@ -221,9 +242,10 @@ automate).
 - `taxProfile.js`: `PUT` with a valid 9-digit TIN succeeds and the
   subsequent `GET` never contains the full TIN, only `tinLast4`; `PUT` with
   an 8-digit or non-numeric TIN returns `400`.
-- `ledgerPostingService.js`: `postCommissionPaid` for an `entityId` with no
-  `taxInfo` calls `notifyAdmins` with `type: 'backup_withholding_risk'`;
-  for an `entityId` with `taxInfo.tinEncrypted` set, it does not.
+- `ledgerPostingService.js`: `postConsultantPayment` for a `consultantId`
+  with no `taxInfo` calls `notifyAdmins` with `type:
+  'backup_withholding_risk'` and `severity: 'critical'`; for a
+  `consultantId` with `taxInfo.tinEncrypted` set, it does not.
 - `/1099/export`: response `Content-Type` is `text/csv`, header row matches
   the documented columns, a row with no TIN on file has a blank `TIN`
   column but is still present.
