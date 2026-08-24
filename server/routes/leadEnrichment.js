@@ -7,16 +7,20 @@ const router = Router();
 
 // POST /api/leads/:id/enrich — admin only: force a single lead's re-enrichment on demand
 router.post('/:id/enrich', async (req, res) => {
-  if (!req.session?.user?.permissions?.admin) return res.status(403).json({ error: 'Forbidden' });
+  try {
+    if (!req.session?.user?.permissions?.admin) return res.status(403).json({ error: 'Forbidden' });
 
-  const lead = await Lead.findOne({ id: req.params.id });
-  if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    const lead = await Lead.findOne({ id: req.params.id });
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
-  const result = await enrichLead(lead);
-  lead.enrichment = result;
-  await lead.save();
+    const result = await enrichLead(lead);
+    lead.enrichment = result;
+    await lead.save();
 
-  res.json(result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

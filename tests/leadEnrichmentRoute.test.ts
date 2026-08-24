@@ -78,4 +78,16 @@ describe('POST /api/leads/:id/enrich', () => {
     const res = await request(buildApp(true)).post('/api/leads/does-not-exist/enrich');
     assert.equal(res.status, 404);
   });
+
+  it('returns 500 (and does not crash the process) when an internal error occurs after the admin check passes', async () => {
+    await Lead.create({ id: 'lead_1', companyName: 'Acme', contactName: 'Jane', email: 'jane@acme.com' });
+
+    mock.method(Lead, 'findOne', () => { throw new Error('simulated DB failure'); });
+    try {
+      const res = await request(buildApp(true)).post('/api/leads/lead_1/enrich');
+      assert.equal(res.status, 500);
+    } finally {
+      mock.restoreAll();
+    }
+  });
 });
