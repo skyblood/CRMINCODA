@@ -27,6 +27,21 @@ const UserSchema = new mongoose.Schema({
     },
     resetPasswordToken:   { type: String,  default: null },
     resetPasswordExpires: { type: Date,    default: null },
+    taxInfo: {
+        legalName:    { type: String, default: '' },
+        tinEncrypted: { type: String, default: '' },
+        tinLast4:     { type: String, default: '' },
+        tinType:      { type: String, enum: ['SSN', 'EIN', ''], default: '' },
+        address: {
+            line1: { type: String, default: '' },
+            line2: { type: String, default: '' },
+            city:  { type: String, default: '' },
+            state: { type: String, default: '' },
+            zip:   { type: String, default: '' },
+            country: { type: String, default: 'US' },
+        },
+        w9SubmittedAt: { type: Date, default: null },
+    },
 }, { timestamps: true, strict: false });
 
 export default mongoose.model('User', UserSchema);
