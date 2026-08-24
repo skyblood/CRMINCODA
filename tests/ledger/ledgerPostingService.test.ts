@@ -1,4 +1,4 @@
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDB, teardownTestDB, clearLedgerCollections, seedChartOfAccounts } from './setup.js';
 import { postExpense, postConsultantPayment, postPaymentReceived, postCommissionPaid } from '../../server/services/ledgerPostingService.js';
@@ -164,5 +164,23 @@ describe('postConsultantPayment — backup withholding warning', () => {
 
     const warning = await Notification.findOne({ type: 'backup_withholding_risk', userId: 'admin-1' });
     assert.equal(warning, null);
+  });
+
+  it('still posts the payment even when the tax-info lookup throws', async () => {
+    await User.create({ id: 'admin-1', name: 'Admin One', email: 'admin@incoda.com', role: 'admin', permissions: { admin: true } });
+    await User.create({ id: 'user-carl', name: 'Carl Consultant', email: 'carl@example.com', role: 'consultant' });
+
+    mock.method(User, 'findOne', () => { throw new Error('DB blip'); });
+    try {
+      const entry = await postConsultantPayment({
+        id: 'tx_22', title: 'Carl payout', amount: 1000, amountUSD: 1000, currency: 'USD',
+        exchangeRateToUSD: 1, category: 'consultant_payment', consultantId: 'user-carl', date: '2026-07-01',
+      });
+      assert.ok(entry, 'payment should still post despite the lookup failure');
+      const laborLine = entry.lines.find(l => l.debit === 1000);
+      assert.ok(laborLine, 'expected the Contract Labor debit line to be created');
+    } finally {
+      mock.restoreAll();
+    }
   });
 });

@@ -67,17 +67,24 @@ export async function postExpense(tx) {
 
 async function warnIfMissingTaxInfo(consultantId, paymentLabel) {
     if (!consultantId) return;
-    const consultant = await User.findOne({ id: consultantId }).lean();
-    if (consultant?.taxInfo?.tinEncrypted) return;
-    notifyAdmins({
-        type: 'backup_withholding_risk',
-        title: `⚠ Pago sin W-9: ${consultant?.name || consultantId}`,
-        message: `Se pagó Contract Labor (${paymentLabel}) sin TIN en archivo. El IRS exige retención de respaldo del 24% sobre pagos a contratistas sin W-9.`,
-        severity: 'critical',
-        relatedModel: 'user',
-        relatedId: consultantId,
-        route: '/settings/users',
-    }).catch(() => {});
+    // This warns; it must never block the payment. Everything below —
+    // including the lookup itself — is wrapped so a DB blip/timeout can
+    // never propagate up into postConsultantPayment (see Task 3 review Fix 1).
+    try {
+        const consultant = await User.findOne({ id: consultantId }).lean();
+        if (consultant?.taxInfo?.tinEncrypted) return;
+        await notifyAdmins({
+            type: 'backup_withholding_risk',
+            title: `⚠ Pago sin W-9: ${consultant?.name || consultantId}`,
+            message: `Se pagó Contract Labor (${paymentLabel}) sin TIN en archivo. El IRS exige retención de respaldo del 24% sobre pagos a contratistas sin W-9.`,
+            severity: 'critical',
+            relatedModel: 'user',
+            relatedId: consultantId,
+            route: '/settings/users',
+        }).catch(() => {});
+    } catch (e) {
+        console.error('[warnIfMissingTaxInfo]', e.message);
+    }
 }
 
 /**
