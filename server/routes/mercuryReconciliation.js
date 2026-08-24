@@ -3,6 +3,9 @@ import LedgerAccount from '../models/LedgerAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
 import { parseCsv } from '../utils/csvParser.js';
 import { CASH_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
+import { computeMatchScore } from '../utils/reconciliationScore.js';
+
+const SUGGESTION_THRESHOLD = 0.5;
 
 const router = Router();
 
@@ -25,7 +28,7 @@ router.post('/', async (req, res) => {
         for (const entry of cashEntries) {
             entry.lines.forEach((line, index) => {
                 if (line.accountId === cashAccount.id) {
-                    cashLines.push({ entryId: entry._id.toString(), lineIndex: index, date: new Date(entry.date), amount: line.debit || -line.credit, reconciled: !!line.reconciled });
+                    cashLines.push({ entryId: entry._id.toString(), lineIndex: index, date: new Date(entry.date), amount: line.debit || -line.credit, memo: entry.memo, reconciled: !!line.reconciled });
                 }
             });
         }
@@ -51,11 +54,48 @@ router.post('/', async (req, res) => {
             }
         }
 
-        const unmatched = cashLines
-            .filter(l => !l.reconciled && !claimedCashLineKeys.has(`${l.entryId}:${l.lineIndex}`))
+        const unmatchedLines = cashLines
+            .filter(l => !l.reconciled && !claimedCashLineKeys.has(`${l.entryId}:${l.lineIndex}`));
+
+        // Second pass: for bank rows and ledger lines that didn't exactly
+        // match, score every remaining pair and greedily assign the
+        // highest-confidence pairs (above SUGGESTION_THRESHOLD) as
+        // suggestions — surfaced for human confirmation via the existing
+        // /confirm-match endpoint, never auto-reconciled.
+        const candidates = [];
+        missing.forEach((m, missingIndex) => {
+            unmatchedLines.forEach(line => {
+                const { score, reasons } = computeMatchScore(m.bankRow, line);
+                if (score >= SUGGESTION_THRESHOLD) {
+                    candidates.push({ missingIndex, line, score, reasons });
+                }
+            });
+        });
+        candidates.sort((a, b) => b.score - a.score);
+
+        const suggested = [];
+        const claimedMissingIndexes = new Set();
+        const claimedSuggestedLineKeys = new Set();
+        for (const c of candidates) {
+            const lineKey = `${c.line.entryId}:${c.line.lineIndex}`;
+            if (claimedMissingIndexes.has(c.missingIndex) || claimedSuggestedLineKeys.has(lineKey)) continue;
+            claimedMissingIndexes.add(c.missingIndex);
+            claimedSuggestedLineKeys.add(lineKey);
+            suggested.push({
+                bankRow: missing[c.missingIndex].bankRow,
+                journalEntryId: c.line.entryId,
+                lineIndex: c.line.lineIndex,
+                confidence: c.score,
+                reasons: c.reasons,
+            });
+        }
+
+        const finalMissing = missing.filter((_, i) => !claimedMissingIndexes.has(i));
+        const unmatched = unmatchedLines
+            .filter(l => !claimedSuggestedLineKeys.has(`${l.entryId}:${l.lineIndex}`))
             .map(l => ({ journalEntryId: l.entryId, lineIndex: l.lineIndex, date: l.date, amount: l.amount }));
 
-        res.json({ matched, unmatched, missing, parseErrors: errors });
+        res.json({ matched, unmatched, missing: finalMissing, suggested, parseErrors: errors });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
