@@ -173,8 +173,12 @@ router.get('/accounts', async (req, res) => {
 router.post('/sync', async (req, res) => {
   try {
     const { accountId, start, end } = req.body;
-    if (typeof accountId !== 'string' || !accountId) {
-      return res.status(400).json({ error: 'accountId is required' });
+    // accountId is interpolated into the Mercury API request path, so it must
+    // be validated against a safe id charset (same pattern as
+    // sanitizeParams's route-param check) before use, not just checked for
+    // non-emptiness.
+    if (typeof accountId !== 'string' || !/^[a-zA-Z0-9_\-]{1,128}$/.test(accountId)) {
+      return res.status(400).json({ error: 'Invalid accountId' });
     }
     const transactions = await listAccountTransactions(accountId, { start, end });
 

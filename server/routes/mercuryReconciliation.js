@@ -9,6 +9,13 @@ import { listAccounts, listAccountTransactions } from '../services/mercuryApiCli
 
 const SUGGESTION_THRESHOLD = 0.5;
 
+// Same charset enforced by server/middleware/sanitize.js's sanitizeParams for
+// route params — accountId arrives via req.body here (sanitizeParams only
+// runs on req.params), and it's interpolated directly into the Mercury API
+// request path in mercuryApiClient.js, so it needs the same validation before
+// it's used to build a URL.
+const SAFE_ID_RE = /^[a-zA-Z0-9_\-]{1,128}$/;
+
 function sameDay(a, b) {
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -151,8 +158,8 @@ export function createMercuryReconciliationRouter({
     scopedRouter.post('/sync', async (req, res) => {
         try {
             const { accountId, start, end } = req.body;
-            if (typeof accountId !== 'string' || !accountId) {
-                return res.status(400).json({ error: 'accountId is required' });
+            if (typeof accountId !== 'string' || !SAFE_ID_RE.test(accountId)) {
+                return res.status(400).json({ error: 'Invalid accountId' });
             }
             const transactions = await mercuryListTransactions(accountId, { start, end });
 

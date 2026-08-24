@@ -204,6 +204,16 @@ describe('POST /api/mercury-import/sync', () => {
     assert.equal(res.status, 400);
   });
 
+  it('rejects an accountId containing path-traversal / URL-control characters instead of forwarding it to the Mercury client', async () => {
+    let called = false;
+    const testApp = buildApp(async () => { called = true; return []; });
+    const res = await request(testApp).post('/api/mercury-import/sync')
+      .send({ accountId: '../accounts?foo=bar#x' });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'Invalid accountId');
+    assert.equal(called, false, 'the Mercury client must never be called with an unvalidated accountId');
+  });
+
   it('persists fetched transactions into MercuryTransaction and reconciles them like the CSV path', async () => {
     await JournalEntry.create({
         date: new Date('2026-07-01'), source: 'expense',
