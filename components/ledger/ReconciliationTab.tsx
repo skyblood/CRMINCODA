@@ -1,6 +1,6 @@
 // components/ledger/ReconciliationTab.tsx
-import React, { useState } from 'react';
-import { Upload, CheckCircle, AlertTriangle, HelpCircle, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, CheckCircle, AlertTriangle, HelpCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 
 type ImportResult = {
@@ -11,10 +11,34 @@ type ImportResult = {
   parseErrors: { row: number; message: string }[];
 };
 
+type MercuryAccount = { id: string; name: string; type: string };
+
+function defaultDateRange() {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 30);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { start: fmt(start), end: fmt(end) };
+}
+
 export function ReconciliationTab() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [accounts, setAccounts] = useState<MercuryAccount[]>([]);
+  const [accountId, setAccountId] = useState('');
+  const [{ start, end }, setDateRange] = useState(defaultDateRange());
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/api/mercury-import/accounts')
+      .then(res => res.ok ? res.json() : [])
+      .then((list: MercuryAccount[]) => {
+        setAccounts(list);
+        if (list.length > 0) setAccountId(list[0].id);
+      })
+      .catch(() => setAccounts([]));
+  }, []);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -40,6 +64,29 @@ export function ReconciliationTab() {
     }
   };
 
+  const handleSync = async () => {
+    if (!accountId) return;
+    setBusy(true);
+    setSyncing(true);
+    setError('');
+    try {
+      const res = await apiFetch('/api/mercury-import/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, start, end }),
+      });
+      if (res.ok) {
+        setResult(await res.json());
+      } else {
+        const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
+        setError(body.error || 'No se pudo sincronizar con Mercury.');
+      }
+    } finally {
+      setBusy(false);
+      setSyncing(false);
+    }
+  };
+
   const confirmMatch = async (journalEntryId: string, lineIndex: number) => {
     setError('');
     const res = await apiFetch('/api/mercury-import/confirm-match', {
@@ -62,10 +109,44 @@ export function ReconciliationTab() {
   return (
     <div className="p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Conciliación Mercury</h2>
-      <label className="flex items-center gap-2 w-fit cursor-pointer bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-800 mb-6">
-        <Upload size={16} /> Subir CSV de Mercury
-        <input type="file" accept=".csv" className="hidden" onChange={handleFile} disabled={busy} />
-      </label>
+      <div className="flex flex-wrap items-end gap-3 mb-6">
+        {accounts.length > 0 && (
+          <>
+            <div className="flex flex-col">
+              <label className="text-xs text-gray-500 mb-1">Cuenta Mercury</label>
+              <select
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                value={accountId}
+                onChange={e => setAccountId(e.target.value)}
+                disabled={busy}
+              >
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col">
+              <label className="text-xs text-gray-500 mb-1">Desde</label>
+              <input type="date" className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                value={start} onChange={e => setDateRange(r => ({ ...r, start: e.target.value }))} disabled={busy} />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-xs text-gray-500 mb-1">Hasta</label>
+              <input type="date" className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                value={end} onChange={e => setDateRange(r => ({ ...r, end: e.target.value }))} disabled={busy} />
+            </div>
+            <button
+              onClick={handleSync}
+              disabled={busy || !accountId}
+              className="flex items-center gap-2 bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-800 disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} /> Sincronizar con Mercury
+            </button>
+          </>
+        )}
+        <label className="flex items-center gap-2 w-fit cursor-pointer bg-gray-100 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-200">
+          <Upload size={16} /> Subir CSV de Mercury
+          <input type="file" accept=".csv" className="hidden" onChange={handleFile} disabled={busy} />
+        </label>
+      </div>
 
       {error && (
         <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mb-6">{error}</div>
