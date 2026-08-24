@@ -29,15 +29,26 @@ export function ReconciliationTab() {
   const [accountId, setAccountId] = useState('');
   const [{ start, end }, setDateRange] = useState(defaultDateRange());
   const [syncing, setSyncing] = useState(false);
+  const [accountsError, setAccountsError] = useState('');
 
   useEffect(() => {
     apiFetch('/api/mercury-import/accounts')
-      .then(res => res.ok ? res.json() : [])
+      .then(async res => {
+        if (!res.ok) {
+          setAccountsError('No se pudieron cargar las cuentas de Mercury — revisa la configuración de MERCURY_API_TOKEN.');
+          return [];
+        }
+        setAccountsError('');
+        return res.json();
+      })
       .then((list: MercuryAccount[]) => {
         setAccounts(list);
         if (list.length > 0) setAccountId(list[0].id);
       })
-      .catch(() => setAccounts([]));
+      .catch(() => {
+        setAccounts([]);
+        setAccountsError('No se pudieron cargar las cuentas de Mercury — revisa la configuración de MERCURY_API_TOKEN.');
+      });
   }, []);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -147,6 +158,10 @@ export function ReconciliationTab() {
           <input type="file" accept=".csv" className="hidden" onChange={handleFile} disabled={busy} />
         </label>
       </div>
+
+      {accountsError && (
+        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mb-6">{accountsError}</div>
+      )}
 
       {error && (
         <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mb-6">{error}</div>
