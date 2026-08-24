@@ -142,6 +142,9 @@ const NEC_1099_THRESHOLD_USD = 600;
 const CONTRACT_LABOR_ACCOUNT_CODE = '6100';
 
 router.get('/1099', async (req, res) => {
+    if (!(req.session?.user?.permissions?.finance || req.session?.user?.permissions?.admin)) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
     try {
         const year = Number(req.query.year) || new Date().getFullYear();
         const laborAccount = await LedgerAccount.findOne({ code: CONTRACT_LABOR_ACCOUNT_CODE }).lean();
@@ -182,8 +185,20 @@ router.get('/1099', async (req, res) => {
     }
 });
 
-function csvEscape(value) {
-    const s = String(value ?? '');
+// `sanitizeFormula` guards against CSV/formula injection (OWASP): if a
+// consultant-controlled value (legalName, address fields — submitted with no
+// content restriction via the self-service PUT /api/tax-profile/me) starts
+// with =, +, -, or @, Excel/Google Sheets can interpret the cell as a
+// formula when the exported CSV is opened. Prefixing with a leading
+// apostrophe forces the cell to render as text without changing how a
+// normal value (not starting with one of those characters) displays.
+// Only pass sanitizeFormula=true for consultant-controlled text fields —
+// never for server-computed/validated values like Box1 or tinType.
+function csvEscape(value, sanitizeFormula = false) {
+    let s = String(value ?? '');
+    if (sanitizeFormula && /^[=+\-@]/.test(s)) {
+        s = `'${s}`;
+    }
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -230,13 +245,13 @@ router.get('/1099/export', async (req, res) => {
             }
             const addr = taxInfo.address || {};
             rows.push([
-                csvEscape(taxInfo.legalName || user?.name || entityId),
+                csvEscape(taxInfo.legalName || user?.name || entityId, true),
                 csvEscape(tin),
                 csvEscape(taxInfo.tinType || ''),
-                csvEscape(addr.line1 || ''),
-                csvEscape(addr.city || ''),
-                csvEscape(addr.state || ''),
-                csvEscape(addr.zip || ''),
+                csvEscape(addr.line1 || '', true),
+                csvEscape(addr.city || '', true),
+                csvEscape(addr.state || '', true),
+                csvEscape(addr.zip || '', true),
                 csvEscape(totals[entityId].toFixed(2)),
             ].join(','));
         }

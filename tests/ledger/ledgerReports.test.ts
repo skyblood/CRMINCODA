@@ -8,9 +8,35 @@ import JournalEntry from '../../server/models/JournalEntry.js';
 import User from '../../server/models/User.js';
 import { encrypt } from '../../server/utils/encryption.js';
 
+// Default session: finance permission. Most tests in this file exercise
+// routes with no permission gate at all (trial-balance/pl/balance-sheet) or
+// need finance access to reach the interesting behavior of gated routes
+// (/1099, /1099/export) — matches how a real dashboard caller is provisioned.
+// Tests that specifically exercise the permission gate build their own app
+// via buildFinanceApp/buildNonFinanceApp below.
 const app = express();
 app.use(express.json());
+app.use((req: any, _res, next) => { req.session = { user: { permissions: { finance: true } } }; next(); });
 app.use('/api/ledger-reports', ledgerReportsRouter);
+
+function buildFinanceApp() {
+    const a = express();
+    a.use((req: any, _res, next) => { req.session = { user: { permissions: { finance: true } } }; next(); });
+    a.use('/api/ledger-reports', ledgerReportsRouter);
+    return a;
+}
+function buildAdminApp() {
+    const a = express();
+    a.use((req: any, _res, next) => { req.session = { user: { permissions: { admin: true } } }; next(); });
+    a.use('/api/ledger-reports', ledgerReportsRouter);
+    return a;
+}
+function buildNonFinanceApp() {
+    const a = express();
+    a.use((req: any, _res, next) => { req.session = { user: { permissions: {} } }; next(); });
+    a.use('/api/ledger-reports', ledgerReportsRouter);
+    return a;
+}
 
 before(setupTestDB);
 after(teardownTestDB);
@@ -194,22 +220,26 @@ describe('GET /api/ledger-reports/1099', () => {
     const orphan = res.body.find((r: any) => r.entityId === 'user-alice' || r.entityId === 'user-bob');
     assert.ok(orphan.name); // some string, either the resolved name or the raw entityId
   });
+
+  it('rejects a non-finance, non-admin caller with 403 (Task 4 review Finding 2)', async () => {
+    const res = await request(buildNonFinanceApp()).get('/api/ledger-reports/1099?year=2026');
+    assert.equal(res.status, 403);
+  });
+
+  it('returns the normal 200 payload for a finance caller (Task 4 review Finding 2)', async () => {
+    const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099?year=2026');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+  });
+
+  it('returns the normal 200 payload for an admin caller (Task 4 review Finding 2)', async () => {
+    const res = await request(buildAdminApp()).get('/api/ledger-reports/1099?year=2026');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+  });
 });
 
 describe('GET /api/ledger-reports/1099/export', () => {
-  function buildFinanceApp() {
-    const a = express();
-    a.use((req: any, _res, next) => { req.session = { user: { permissions: { finance: true } } }; next(); });
-    a.use('/api/ledger-reports', ledgerReportsRouter);
-    return a;
-  }
-  function buildNonFinanceApp() {
-    const a = express();
-    a.use((req: any, _res, next) => { req.session = { user: { permissions: {} } }; next(); });
-    a.use('/api/ledger-reports', ledgerReportsRouter);
-    return a;
-  }
-
   beforeEach(async () => {
     await User.deleteMany({});
     process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || Buffer.alloc(32, 7).toString('base64');
@@ -244,5 +274,94 @@ describe('GET /api/ledger-reports/1099/export', () => {
     const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099/export?year=2020');
     assert.equal(res.status, 200);
     assert.equal(res.text.trim(), 'Recipient Name,TIN,TIN Type,Address,City,State,Zip,Box1_NonemployeeComp');
+  });
+
+  it('neutralizes a formula-injection payload in legalName with a leading apostrophe (Task 4 review Finding 1)', async () => {
+    await User.findOneAndUpdate(
+      { id: 'user-alice' },
+      { $set: { 'taxInfo.legalName': '=1+1' } },
+    );
+
+    const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099/export?year=2026');
+    assert.equal(res.status, 200);
+    const lines = res.text.trim().split('\n');
+    const cells = lines[1].split(',');
+    // First cell must be neutralized: leading apostrophe before the '=',
+    // not a bare formula-triggering '='.
+    assert.equal(cells[0], "'=1+1");
+  });
+
+  it('neutralizes a quote/comma-bearing formula-injection payload (HYPERLINK) correctly, including CSV quoting (Task 4 review Finding 1)', async () => {
+    await User.findOneAndUpdate(
+      { id: 'user-alice' },
+      { $set: { 'taxInfo.legalName': '=HYPERLINK("http://evil.com","x")' } },
+    );
+
+    const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099/export?year=2026');
+    assert.equal(res.status, 200);
+    const lines = res.text.trim().split('\n');
+    // The value needs CSV-quoting (it contains commas/quotes) AND
+    // formula-neutralizing (it starts with '='): the quoted cell's content
+    // must start with an apostrophe immediately after the opening quote.
+    assert.match(lines[1], /^"'=HYPERLINK\(/);
+  });
+
+  it('neutralizes a formula-injection payload starting with +, -, or @ as well (Task 4 review Finding 1)', async () => {
+    await User.findOneAndUpdate(
+      { id: 'user-alice' },
+      { $set: { 'taxInfo.address.line1': '+1 234 555 0000' } },
+    );
+
+    const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099/export?year=2026');
+    assert.equal(res.status, 200);
+    const lines = res.text.trim().split('\n');
+    const cells = lines[1].split(',');
+    // Address (Column 4, index 3) should be neutralized
+    assert.equal(cells[3], "'+1 234 555 0000");
+  });
+
+  it('includes a row with a blank TIN for a qualifying entityId with no matching User (Task 4 review Finding 3)', async () => {
+    await JournalEntry.create({
+      date: new Date('2026-05-01'), source: 'payroll',
+      lines: [
+        { accountId: 'coa_6100', debit: 700, amountUSD: 700, entityId: 'user-orphan' },
+        { accountId: 'coa_1000', credit: 700, amountUSD: 700 },
+      ],
+    });
+
+    const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099/export?year=2026');
+    assert.equal(res.status, 200);
+    const lines = res.text.trim().split('\n');
+    const orphanLine = lines.find(l => l.startsWith('user-orphan,'));
+    assert.ok(orphanLine, 'expected a row for the orphan entityId with blank TIN');
+    const cells = orphanLine!.split(',');
+    assert.equal(cells[0], 'user-orphan'); // falls back to entityId as name
+    assert.equal(cells[1], ''); // blank TIN, not dropped
+  });
+
+  it('emits TIN_DECRYPT_ERROR for a row whose tinEncrypted is corrupted, without failing the whole export (Task 4 review Finding 4)', async () => {
+    await JournalEntry.create({
+      date: new Date('2026-05-01'), source: 'payroll',
+      lines: [
+        { accountId: 'coa_6100', debit: 800, amountUSD: 800, entityId: 'user-corrupt' },
+        { accountId: 'coa_1000', credit: 800, amountUSD: 800 },
+      ],
+    });
+    await User.create({
+      id: 'user-corrupt', name: 'Corrupt TIN Consultant', email: 'corrupt@example.com', role: 'consultant',
+      taxInfo: { legalName: 'Corrupt TIN Consultant', tinEncrypted: 'not-a-valid-ciphertext-at-all', tinType: 'SSN' },
+    });
+
+    const res = await request(buildFinanceApp()).get('/api/ledger-reports/1099/export?year=2026');
+    assert.equal(res.status, 200); // rest of the export still succeeds
+    const lines = res.text.trim().split('\n');
+
+    // Alice's row (valid TIN) is still intact.
+    assert.ok(lines.some(l => l.startsWith('Alice A. Consultant,123456789,')));
+
+    const corruptLine = lines.find(l => l.startsWith('Corrupt TIN Consultant,'));
+    assert.ok(corruptLine, 'expected a row for the corrupt-TIN entityId');
+    const cells = corruptLine!.split(',');
+    assert.equal(cells[1], 'TIN_DECRYPT_ERROR');
   });
 });
