@@ -13,10 +13,19 @@ router.use((req, res, next) => {
   next();
 });
 
-// Helper: convert rows to CSV string
-function toCSV(headers, rows) {
-  const escape = (val) => {
-    const s = val == null ? '' : String(val);
+// Helper: convert rows to CSV string.
+// `sanitizeCols` lists headers holding free-text user input (names,
+// titles, descriptions) that must be defended against CSV formula
+// injection \u2014 a value starting with =, +, -, or @ is prefixed with a
+// leading apostrophe (OWASP-recommended mitigation; Excel/Sheets then
+// treat it as forced text instead of evaluating it as a formula).
+// Never applied to numeric columns: a negative number's own leading
+// "-" would otherwise get force-texted, corrupting legitimate values.
+function toCSV(headers, rows, sanitizeCols = []) {
+  const sanitizeSet = new Set(sanitizeCols);
+  const escape = (val, sanitize) => {
+    let s = val == null ? '' : String(val);
+    if (sanitize && /^[=+\-@]/.test(s)) s = `'${s}`;
     if (s.includes(',') || s.includes('"') || s.includes('\n')) {
       return `"${s.replace(/"/g, '""')}"`;
     }
@@ -24,7 +33,7 @@ function toCSV(headers, rows) {
   };
   const lines = [headers.join(',')];
   for (const row of rows) {
-    lines.push(headers.map(h => escape(row[h])).join(','));
+    lines.push(headers.map(h => escape(row[h], sanitizeSet.has(h))).join(','));
   }
   return '\uFEFF' + lines.join('\n');
 }
@@ -57,7 +66,7 @@ router.get('/finance/expenses', async (req, res) => {
       projectId: d.projectId || ''
     }));
     setCsvHeaders(res, 'expenses.csv');
-    res.send(toCSV(headers, rows));
+    res.send(toCSV(headers, rows, ['title', 'description', 'category']));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -136,7 +145,7 @@ router.get('/profitability', async (req, res) => {
       return true;
     });
     setCsvHeaders(res, 'profitability.csv');
-    res.send(toCSV(headers, rows));
+    res.send(toCSV(headers, rows, ['project', 'type', 'status']));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -159,7 +168,7 @@ router.get('/commissions', async (req, res) => {
       return { company: l.companyName, closedValue: val, bm_40, fabian_30, spencer_30, total };
     });
     setCsvHeaders(res, 'commissions.csv');
-    res.send(toCSV(headers, rows));
+    res.send(toCSV(headers, rows, ['company']));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -184,7 +193,7 @@ router.get('/leads', async (req, res) => {
       partner: l.partnerName || ''
     }));
     setCsvHeaders(res, 'leads.csv');
-    res.send(toCSV(headers, rows));
+    res.send(toCSV(headers, rows, ['company', 'contact', 'stage', 'country', 'partner']));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -208,7 +217,7 @@ router.get('/timelogs', async (req, res) => {
       approvedCost: l.approvedCost || 0
     }));
     setCsvHeaders(res, `timelogs_${projectId}.csv`);
-    res.send(toCSV(headers, rows));
+    res.send(toCSV(headers, rows, ['consultant', 'task', 'status']));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
