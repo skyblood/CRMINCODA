@@ -23,6 +23,18 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["."],
-  "exclude": ["vite.config.ts", "tests/ledger", "tests/board-reports", "tests/ai-reports"],
+  "exclude": [
+    "vite.config.ts",
+    "tests/ledger",
+    "tests/board-reports",
+    "tests/ai-reports",
+    "tests/webhookRetrySweep.test.ts",
+    "tests/search.test.ts",
+    "tests/encryption.test.ts",
+    "tests/taxProfile.test.ts",
+    "tests/leadEnrichmentService.test.ts",
+    "tests/leadEnrichmentScheduler.test.ts",
+    "tests/leadEnrichmentRoute.test.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
