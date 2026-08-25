@@ -42,9 +42,12 @@ export const ApiKeysManager: React.FC = () => {
 
   const load = async () => {
     setLoading(true);
+    setError('');
     try {
       const r = await apiFetch('/api/apikeys');
-      setKeys(await r.json());
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      setKeys(Array.isArray(data) ? data : []);
     } catch { setError('Error cargando claves'); }
     setLoading(false);
   };
