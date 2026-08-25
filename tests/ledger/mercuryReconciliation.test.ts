@@ -310,6 +310,57 @@ describe('POST /api/mercury-import/sync — category suggestion on missing rows'
     assert.equal(stored?.counterpartyNickname, 'Vendor X');
   });
 
+  it('builds Description from counterpartyNickname, not the nonexistent "description" field Mercury never sends', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        // Real Mercury transactions never carry a top-level "description" field
+        // (verified against a live API response) — only bankDescription,
+        // counterpartyName, and counterpartyNickname. Deliberately omitting
+        // "description" here to prove the fix doesn't depend on it.
+        { id: 'tx_desc_1', amount: -50, status: 'sent', postedAt: '2026-07-01', counterpartyNickname: 'Andres Incoda', counterpartyName: 'Reinaldo Andrés Jaimes Muñoz', bankDescription: 'Send Money transaction initiated on Mercury' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Description, 'Andres Incoda');
+    const stored = await MercuryTransaction.findOne({ mercuryTransactionId: 'tx_desc_1' }).lean();
+    assert.equal(stored?.description, 'Andres Incoda');
+  });
+
+  it('falls back to counterpartyName, then bankDescription, when counterpartyNickname is absent', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_desc_2', amount: -30, status: 'sent', postedAt: '2026-07-01', counterpartyName: 'Amazon Web Services', bankDescription: 'Some generic bank text' },
+        { id: 'tx_desc_3', amount: -5, status: 'sent', postedAt: '2026-07-01', bankDescription: 'Intl. Transaction Fee' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    const byId = (id: string) => res.body.missing.find((m: any) => m.bankRow.mercuryTransactionId === id);
+    assert.equal(byId('tx_desc_2').bankRow.Description, 'Amazon Web Services');
+    assert.equal(byId('tx_desc_3').bankRow.Description, 'Intl. Transaction Fee');
+  });
+
+  it('renders Date as a plain date (not a raw ISO timestamp) even when falling back to createdAt', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_pending', amount: -100, status: 'pending', postedAt: null, createdAt: '2026-07-27T17:49:05.436430Z', counterpartyNickname: 'Vendor' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Date, '2026-07-27');
+  });
+
   it('does not attach mercuryTransactionId to a missing row from the CSV path', async () => {
     const csv = 'Date,Description,Amount\n2026-07-01,Unrecorded Fee,-25.00\n';
     const res = await request(app).post('/api/mercury-import').send({ csv });

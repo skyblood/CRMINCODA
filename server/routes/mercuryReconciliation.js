@@ -19,6 +19,24 @@ const SUGGESTION_THRESHOLD = 0.5;
 // it's used to build a URL.
 const SAFE_ID_RE = /^[a-zA-Z0-9_\-]{1,128}$/;
 
+// Real Mercury transactions never carry a top-level "description" field
+// (verified against a live production API response) — only bankDescription
+// (a generic boilerplate string, e.g. "Send Money transaction initiated on
+// Mercury"), counterpartyName, and counterpartyNickname. Mercury's own
+// dashboard shows the nickname/name in its "To/From" column, which is far
+// more useful than the generic bank text, so prefer it.
+function describeTransaction(t) {
+    return t.counterpartyNickname || t.counterpartyName || t.bankDescription || '';
+}
+
+// A pending transaction has no postedAt yet, so callers fall back to
+// createdAt — Mercury returns both as full ISO timestamps. Truncating to the
+// date portion keeps the value readable in the UI and still parses fine as
+// the same calendar day for reconcileRows' sameDay() matching.
+function toDateOnly(isoString) {
+    return typeof isoString === 'string' ? isoString.slice(0, 10) : isoString;
+}
+
 function sameDay(a, b) {
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -175,7 +193,7 @@ export function createMercuryReconciliationRouter({
                     status: t.status,
                     postedAt: t.postedAt,
                     mercuryCreatedAt: t.createdAt ?? null,
-                    description: t.description,
+                    description: describeTransaction(t),
                     counterpartyName: t.counterpartyName,
                     mercuryCategoryName: t.categoryData?.name ?? null,
                     kind: t.kind,
@@ -185,8 +203,8 @@ export function createMercuryReconciliationRouter({
             )));
 
             const rows = transactions.map(t => ({
-                Date: t.postedAt ?? t.createdAt,
-                Description: t.description ?? '',
+                Date: toDateOnly(t.postedAt ?? t.createdAt),
+                Description: describeTransaction(t),
                 Amount: String(t.amount),
                 mercuryTransactionId: t.id,
                 mercurySuggestedTaxCategory: suggestTaxCategory(t.categoryData?.name),
