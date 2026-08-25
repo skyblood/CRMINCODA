@@ -8,6 +8,9 @@ const MercuryTransactionSchema = new mongoose.Schema({
   postedAt: Date,
   description: String,
   counterpartyName: String,
+  mercuryCategoryName: String,
+  kind: String,
+  counterpartyNickname: String,
 }, { timestamps: true });
 
 MercuryTransactionSchema.index(

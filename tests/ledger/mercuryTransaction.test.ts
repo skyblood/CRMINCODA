@@ -18,9 +18,15 @@ describe('MercuryTransaction', () => {
       postedAt: new Date('2026-07-01'),
       description: 'AWS Hosting',
       counterpartyName: 'Amazon Web Services',
+      mercuryCategoryName: 'Office Supplies & Equipment',
+      kind: 'outgoingPayment',
+      counterpartyNickname: 'AWS',
     });
     assert.equal(doc.mercuryAccountId, 'acc_1');
     assert.equal(doc.amount, -42.5);
+    assert.equal(doc.mercuryCategoryName, 'Office Supplies & Equipment');
+    assert.equal(doc.kind, 'outgoingPayment');
+    assert.equal(doc.counterpartyNickname, 'AWS');
   });
 
   it('upserting the same account+transaction id twice results in exactly one document, with fields updated', async () => {
