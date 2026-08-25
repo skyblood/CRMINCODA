@@ -8,6 +8,7 @@ import MercuryTransaction from '../models/MercuryTransaction.js';
 import { listAccounts, listAccountTransactions } from '../services/mercuryApiClient.js';
 import Transaction from '../models/Transaction.js';
 import { suggestTaxCategory } from '../seed/mercuryCategoryMap.js';
+import { postExpense } from '../services/ledgerPostingService.js';
 
 const SUGGESTION_THRESHOLD = 0.5;
 
@@ -173,6 +174,7 @@ export function createMercuryReconciliationRouter({
                     amount: t.amount,
                     status: t.status,
                     postedAt: t.postedAt,
+                    mercuryCreatedAt: t.createdAt ?? null,
                     description: t.description,
                     counterpartyName: t.counterpartyName,
                     mercuryCategoryName: t.categoryData?.name ?? null,
@@ -205,10 +207,20 @@ export function createMercuryReconciliationRouter({
             const mtx = await MercuryTransaction.findOne({ mercuryTransactionId }).lean();
             if (!mtx) return res.status(404).json({ error: 'Mercury transaction not found' });
 
+            // Only outgoing (negative) Mercury transactions may be approved as an
+            // expense. A positive/incoming transaction booked as `type: 'expense'`
+            // would double-count as money leaving (a fake expense debit AND a Cash
+            // credit) when it actually came in — see Finding 1 of the final review.
+            if (!(mtx.amount < 0)) {
+                return res.status(400).json({ error: 'Solo los movimientos de salida se pueden aprobar como gasto.' });
+            }
+
             const taxCategory = suggestTaxCategory(mtx.mercuryCategoryName);
             const amount = Math.abs(mtx.amount);
             const transactionId = `mercury_${mercuryTransactionId}`;
-            const postedAt = mtx.postedAt || new Date();
+            const postedAt = mtx.postedAt || mtx.mercuryCreatedAt || new Date();
+
+            const postingFailedMessage = 'El gasto se registró pero no se pudo contabilizar en el libro diario. Contacta soporte.';
 
             try {
                 await Transaction.create({
@@ -225,9 +237,53 @@ export function createMercuryReconciliationRouter({
                     taxCategory,
                     description: mtx.description || '',
                 });
+
+                // Transaction.create() awaits the model's post('save') hook (see
+                // server/models/Transaction.js), so by the time we get here the
+                // ledger-posting attempt has already finished, successfully or not.
+                // The hook swallows posting failures rather than throwing (so the
+                // Transaction write itself is never blocked/lost), which means we
+                // must check the outcome explicitly instead of trusting a 201.
+                // We check for the JournalEntry directly rather than trusting
+                // postingStatus alone: if the poster succeeds but the subsequent
+                // postingStatus='posted' write fails, the hook logs and leaves the
+                // status stale (never sets 'failed' in that case) — checking for
+                // the JournalEntry itself is the one source of truth for whether
+                // posting actually happened. See Finding 3 of the final review.
+                const entry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId }).lean();
+                if (!entry) {
+                    return res.status(502).json({ error: postingFailedMessage });
+                }
                 res.status(201).json({ id: transactionId, taxCategory });
             } catch (err) {
                 if (err.code === 11000) {
+                    // The Transaction already exists (this is a retry). Don't just
+                    // assume its original posting succeeded — check for the
+                    // JournalEntry, and if it's missing, self-heal by retrying the
+                    // post directly. postExpense() is idempotent via its own
+                    // alreadyPosted() check, so calling it again is safe even if it
+                    // races with another in-flight attempt.
+                    const existingEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId }).lean();
+                    if (existingEntry) {
+                        return res.status(200).json({ id: transactionId, taxCategory, alreadyApproved: true });
+                    }
+
+                    const existingTx = await Transaction.findOne({ id: transactionId }).lean();
+                    if (existingTx) {
+                        try {
+                            await postExpense(existingTx);
+                        } catch (postErr) {
+                            console.error(`[mercury-approve] retry posting failed for ${transactionId}:`, postErr.stack || postErr);
+                        }
+                    }
+
+                    const retryEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId }).lean();
+                    if (!retryEntry) {
+                        return res.status(502).json({ error: postingFailedMessage });
+                    }
+                    if (existingTx) {
+                        await Transaction.updateOne({ id: transactionId }, { $set: { postingStatus: 'posted' } }).catch(() => {});
+                    }
                     return res.status(200).json({ id: transactionId, taxCategory, alreadyApproved: true });
                 }
                 throw err;

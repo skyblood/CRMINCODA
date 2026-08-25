@@ -236,7 +236,7 @@ export function ReconciliationTab() {
                     <div className="text-[11px] text-gray-400">Categoría sugerida: {m.bankRow.mercurySuggestedTaxCategory}</div>
                   )}
                 </div>
-                {m.bankRow.mercuryTransactionId && (
+                {m.bankRow.mercuryTransactionId && Number(m.bankRow.Amount) < 0 && (
                   <button
                     onClick={() => approveMissing(m.bankRow.mercuryTransactionId!)}
                     className="text-purple-700 text-xs whitespace-nowrap flex-shrink-0"

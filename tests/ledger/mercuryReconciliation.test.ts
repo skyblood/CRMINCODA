@@ -8,6 +8,8 @@ import mercuryReconciliationRouter, { createMercuryReconciliationRouter } from '
 import JournalEntry from '../../server/models/JournalEntry.js';
 import MercuryTransaction from '../../server/models/MercuryTransaction.js';
 import Transaction from '../../server/models/Transaction.js';
+import LedgerAccount from '../../server/models/LedgerAccount.js';
+import { DEFAULT_CHART_OF_ACCOUNTS } from '../../server/seed/chartOfAccounts.js';
 
 const app = express();
 app.use(express.json());
@@ -369,5 +371,99 @@ describe('POST /api/mercury-import/approve', () => {
 
     const entryCount = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'mercury_tx_approve_2' });
     assert.equal(entryCount, 1);
+  });
+
+  // Finding 1: a positive-amount (incoming) Mercury transaction must never be
+  // approved as an expense — see server/routes/mercuryReconciliation.js's sign
+  // guard right after the 404 check.
+  it('rejects approving a positive-amount (incoming) Mercury transaction', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_incoming_1',
+      amount: 5000, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Client payment', mercuryCategoryName: 'Revenue',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_incoming_1' });
+
+    assert.equal(res.status, 400);
+    const tx = await Transaction.findOne({ id: 'mercury_tx_incoming_1' }).lean();
+    assert.equal(tx, null, 'no Transaction should have been created for an incoming transaction');
+  });
+
+  // Finding 2: a still-pending Mercury transaction (postedAt: null) must fall
+  // back to Mercury's own createdAt, persisted as mercuryCreatedAt, instead of
+  // today's date — otherwise the ledger entry is misdated and the row can
+  // never re-match on a later sync.
+  it('falls back to mercuryCreatedAt (not today) when postedAt is null', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_pending_1',
+      amount: -42, status: 'pending', postedAt: null,
+      mercuryCreatedAt: new Date('2026-06-15T00:00:00.000Z'),
+      description: 'Pending charge', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_pending_1' });
+
+    assert.equal(res.status, 201);
+    const tx = await Transaction.findOne({ id: 'mercury_tx_pending_1' }).lean();
+    assert.ok(tx);
+    assert.equal(tx?.date, '2026-06-15');
+    assert.equal(new Date(tx!.dateObj as unknown as string).toISOString().split('T')[0], '2026-06-15');
+  });
+
+  // Finding 3: if ledger posting fails (e.g. a required account is missing),
+  // /approve must not silently return 201 — the Transaction is already
+  // created and kept (never deleted), but the response must signal failure.
+  it('returns 502 when the Transaction is created but ledger posting fails', async () => {
+    // Force postExpense() to fail by removing the Cash account it requires.
+    await LedgerAccount.deleteOne({ code: '1000' });
+
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_fail_1',
+      amount: -30, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Bad posting', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_fail_1' });
+
+    assert.equal(res.status, 502);
+    assert.match(res.body.error, /libro diario/);
+
+    // The Transaction record itself must survive — it's not deleted on a
+    // posting failure, only flagged as not-yet-posted.
+    const tx = await Transaction.findOne({ id: 'mercury_tx_fail_1' }).lean();
+    assert.ok(tx, 'the Transaction must not be deleted after a posting failure');
+
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_fail_1' }).lean();
+    assert.equal(entry, null);
+  });
+
+  // Finding 3: retrying an approval whose posting previously failed must
+  // self-heal — not just return a stale 200 alreadyApproved with no
+  // JournalEntry ever created.
+  it('self-heals on retry after a posting failure: a real JournalEntry gets created', async () => {
+    await LedgerAccount.deleteOne({ code: '1000' });
+
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_fail_2',
+      amount: -15, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Bad posting 2', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const first = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_fail_2' });
+    assert.equal(first.status, 502);
+
+    // Restore the Cash account, then retry the same approval.
+    await LedgerAccount.insertMany([DEFAULT_CHART_OF_ACCOUNTS.find(a => a.code === '1000')]);
+
+    const second = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_fail_2' });
+    assert.equal(second.status, 200);
+    assert.equal(second.body.alreadyApproved, true);
+
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_fail_2' }).lean();
+    assert.ok(entry, 'expected the retry to self-heal by posting the JournalEntry');
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_fail_2' }).lean();
+    assert.equal(tx?.postingStatus, 'posted');
   });
 });
