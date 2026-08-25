@@ -169,21 +169,31 @@ export function ReconciliationTab() {
     setBulkApproving(true);
     setError('');
     try {
-      const res = await apiFetch('/api/mercury-import/approve-many', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: eligible.map(m => ({ mercuryTransactionId: m.bankRow.mercuryTransactionId, taxCategory: categoryFor(m.bankRow) })),
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
-        setError(body.error || 'No se pudo aprobar en lote.');
-        return;
+      // The server caps /approve-many at 100 items per call — chunk here and
+      // send sequential requests, accumulating results across all batches
+      // before touching any state once at the end, so a >100-row sync
+      // doesn't fail outright and the UI doesn't flicker per-batch.
+      const allResults: any[] = [];
+      for (let i = 0; i < eligible.length; i += 100) {
+        const batch = eligible.slice(i, i + 100);
+        const res = await apiFetch('/api/mercury-import/approve-many', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: batch.map(m => ({ mercuryTransactionId: m.bankRow.mercuryTransactionId, taxCategory: categoryFor(m.bankRow) })),
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
+          setError(body.error || 'No se pudo aprobar en lote.');
+          return;
+        }
+        const body = await res.json();
+        allResults.push(...body.results);
       }
-      const body = await res.json();
-      const approvedIds = new Set(body.results.filter((r: any) => r.status === 'approved').map((r: any) => r.mercuryTransactionId));
-      const failedResults = body.results.filter((r: any) => r.status === 'error');
+
+      const approvedIds = new Set(allResults.filter((r: any) => r.status === 'approved').map((r: any) => r.mercuryTransactionId));
+      const failedResults = allResults.filter((r: any) => r.status === 'error');
 
       if (failedResults.length > 0) {
         setError(`${failedResults.length} de ${eligible.length} no se pudieron aprobar: ${failedResults.map((r: any) => r.error).join('; ')}`);
@@ -192,7 +202,7 @@ export function ReconciliationTab() {
       const newlyApproved: ApprovedRow[] = eligible
         .filter(m => approvedIds.has(m.bankRow.mercuryTransactionId))
         .map(m => {
-          const r = body.results.find((x: any) => x.mercuryTransactionId === m.bankRow.mercuryTransactionId);
+          const r = allResults.find((x: any) => x.mercuryTransactionId === m.bankRow.mercuryTransactionId);
           return { mercuryTransactionId: m.bankRow.mercuryTransactionId!, bankRow: m.bankRow, taxCategory: r.taxCategory };
         });
 

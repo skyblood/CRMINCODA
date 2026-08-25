@@ -607,6 +607,41 @@ describe('POST /api/mercury-import/approve', () => {
     const tx = await Transaction.findOne({ id: 'mercury_tx_override_2' }).lean();
     assert.equal(tx, null);
   });
+
+  // Task 5 review, Finding 4: a truly unexpected error out of
+  // Transaction.create() — not the sign guard, not an invalid taxCategory,
+  // and not the 11000 duplicate-key retry path — must still surface as a
+  // genuine 500, never get misclassified as the 502 reserved for a verified
+  // ledger-posting failure. approveOne's final catch branch returns an
+  // explicit httpStatus: 500 for exactly this case; before this test, no
+  // test exercised it. Force Transaction.create() itself to reject with a
+  // non-11000 error using the same static-method monkeypatch pattern
+  // tests/ledger/postingHooks.test.ts already uses, restoring the original
+  // afterward so no other test is affected.
+  it('returns 500 (not 502) when Transaction.create() fails with a genuinely unexpected error', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_unexpected_1',
+      amount: -20, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Weird failure', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const originalCreate = Transaction.create;
+    Transaction.create = (async () => { throw new Error('simulated unexpected Mongo write failure'); }) as typeof Transaction.create;
+
+    let res;
+    try {
+      res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_unexpected_1' });
+    } finally {
+      Transaction.create = originalCreate;
+    }
+
+    assert.equal(res.status, 500);
+    assert.notEqual(res.status, 502, 'a genuinely unexpected error must not be misclassified as a known posting failure');
+    assert.equal(res.body.error, 'simulated unexpected Mongo write failure');
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_unexpected_1' }).lean();
+    assert.equal(tx, null, 'Transaction.create was mocked to reject — nothing should have been persisted');
+  });
 });
 
 describe('POST /api/mercury-import/unapprove', () => {
@@ -740,5 +775,51 @@ describe('POST /api/mercury-import/approve-many', () => {
 
     assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_3' }).lean());
     assert.equal(await Transaction.findOne({ id: 'mercury_tx_bulk_incoming' }).lean(), null);
+  });
+
+  // Task 5 review, Finding 3: the previous partial-failure test above fails
+  // its item at the very first line of approveOne (the sign guard), before
+  // any database work happens — it can't prove a genuine mid-batch DB-layer
+  // exception (thrown inside Transaction.create()'s post-save posting hook)
+  // is contained per-item rather than escaping the loop and corrupting/
+  // aborting the rest of the batch. Force a real posting failure for one
+  // item only: delete both the 'Contract Labor' expense account AND the
+  // 'Other Expenses' account findExpenseAccount() falls back to when no
+  // taxCategory-specific account exists, so a Payroll-suggested item's
+  // Transaction.create() succeeds but its post-save posting hook genuinely
+  // fails to find any expense account to post against. A sibling item
+  // suggesting 'Travel' keeps its own dedicated account (untouched) and
+  // must still post successfully in the same loop.
+  it('a real DB-layer posting failure for one item does not abort or corrupt the rest of the batch', async () => {
+    await LedgerAccount.deleteMany({ code: { $in: ['6100', '7900'] } });
+
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_dbfail', amount: -45, status: 'sent', postedAt: new Date('2026-07-05'), description: 'Payroll run', mercuryCategoryName: 'Payroll' });
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_ok', amount: -12, status: 'sent', postedAt: new Date('2026-07-05'), description: 'Flight', mercuryCategoryName: 'Travel & Transportation' });
+
+    const res = await request(app).post('/api/mercury-import/approve-many').send({
+      items: [
+        { mercuryTransactionId: 'tx_bulk_dbfail' },
+        { mercuryTransactionId: 'tx_bulk_ok' },
+      ],
+    });
+
+    assert.equal(res.status, 200);
+    const failed = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_dbfail');
+    const ok = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_ok');
+
+    assert.equal(failed.status, 'error');
+    assert.ok(failed.error);
+    assert.equal(ok.status, 'approved');
+
+    // The succeeding sibling item genuinely posted — real Transaction and
+    // JournalEntry both exist for it.
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_ok' }).lean());
+    assert.ok(await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_bulk_ok' }).lean());
+
+    // The failing item's Transaction is still created (posting failed, but
+    // the record itself is kept — same contract as the single-item /approve
+    // posting-failure test), yet it has no JournalEntry.
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_dbfail' }).lean());
+    assert.equal(await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_bulk_dbfail' }).lean(), null);
   });
 });

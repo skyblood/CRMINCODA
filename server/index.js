@@ -227,6 +227,8 @@ app.post('/api/mercury-import', writeLimit);
 app.post('/api/mercury-import/confirm-match', writeLimit);
 app.post('/api/mercury-import/sync', writeLimit);
 app.post('/api/mercury-import/approve', writeLimit);
+app.post('/api/mercury-import/approve-many', writeLimit);
+app.post('/api/mercury-import/unapprove', writeLimit);
 
 // ── Tier 4 — Auth routes — strict ────────────────────────────────────────────
 // Login:        10 attempts / 15 min  (brute-force protection)
