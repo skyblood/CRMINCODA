@@ -80,3 +80,42 @@ export async function listAccountTransactions(accountId, { start, end } = {}, fe
   }
   return deduped;
 }
+
+// Real Mercury transactions never carry a top-level "description" field
+// (verified against a live production API response) — only bankDescription
+// (a generic boilerplate string, e.g. "Send Money transaction initiated on
+// Mercury"), counterpartyName, and counterpartyNickname. Mercury's own
+// dashboard shows the nickname/name in its "To/From" column, which is far
+// more useful than the generic bank text, so prefer it.
+//
+// This duplicates mercuryReconciliation.js's describeTransaction(t) — kept
+// in sync by design. A service module importing from a route module would
+// be a backwards dependency, so the logic is intentionally repeated here
+// rather than shared.
+function describeForUpsert(t) {
+  const who = t.counterpartyNickname || t.counterpartyName || t.bankDescription || '';
+  if (t.note) return who ? `${who} — ${t.note}` : t.note;
+  return who;
+}
+
+// Single source of truth for the upsert shape both POST /sync and the
+// nightly sync scheduler write into MercuryTransaction — keeping this in
+// one place means the two call sites can't drift apart on which fields
+// get captured.
+export function mapMercuryTransactionToUpsert(accountId, t) {
+  return {
+    mercuryAccountId: accountId,
+    mercuryTransactionId: t.id,
+    amount: t.amount,
+    status: t.status,
+    postedAt: t.postedAt,
+    mercuryCreatedAt: t.createdAt ?? null,
+    description: describeForUpsert(t),
+    counterpartyName: t.counterpartyName,
+    mercuryCategoryName: t.categoryData?.name ?? null,
+    kind: t.kind,
+    counterpartyNickname: t.counterpartyNickname,
+    note: t.note ?? null,
+    dashboardLink: t.dashboardLink ?? null,
+  };
+}

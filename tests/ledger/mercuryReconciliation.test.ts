@@ -413,6 +413,22 @@ describe('POST /api/mercury-import/sync — category suggestion on missing rows'
     assert.equal(res.body.missing[0].bankRow.mercuryTransactionId, undefined);
     assert.equal(res.body.missing[0].bankRow.mercurySuggestedTaxCategory, undefined);
   });
+
+  it('attaches dashboardLink to a missing row and persists it on the stored MercuryTransaction', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_link_1', amount: -40, status: 'sent', postedAt: '2026-07-01', counterpartyNickname: 'Vendor', dashboardLink: 'https://mercury.com/transactions/tx_link_1' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.dashboardLink, 'https://mercury.com/transactions/tx_link_1');
+    const stored = await MercuryTransaction.findOne({ mercuryTransactionId: 'tx_link_1' }).lean();
+    assert.equal(stored?.dashboardLink, 'https://mercury.com/transactions/tx_link_1');
+  });
 });
 
 describe('POST /api/mercury-import/approve', () => {

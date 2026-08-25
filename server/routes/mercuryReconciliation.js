@@ -5,7 +5,7 @@ import { parseCsv } from '../utils/csvParser.js';
 import { CASH_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
 import { computeMatchScore } from '../utils/reconciliationScore.js';
 import MercuryTransaction from '../models/MercuryTransaction.js';
-import { listAccounts, listAccountTransactions } from '../services/mercuryApiClient.js';
+import { listAccounts, listAccountTransactions, mapMercuryTransactionToUpsert } from '../services/mercuryApiClient.js';
 import Transaction from '../models/Transaction.js';
 import { suggestTaxCategory } from '../seed/mercuryCategoryMap.js';
 import { postExpense, isPeriodClosed } from '../services/ledgerPostingService.js';
@@ -192,20 +192,7 @@ export function createMercuryReconciliationRouter({
 
             await Promise.all(transactions.map(t => MercuryTransaction.updateOne(
                 { mercuryAccountId: accountId, mercuryTransactionId: t.id },
-                { $set: {
-                    mercuryAccountId: accountId,
-                    mercuryTransactionId: t.id,
-                    amount: t.amount,
-                    status: t.status,
-                    postedAt: t.postedAt,
-                    mercuryCreatedAt: t.createdAt ?? null,
-                    description: describeTransaction(t),
-                    counterpartyName: t.counterpartyName,
-                    mercuryCategoryName: t.categoryData?.name ?? null,
-                    kind: t.kind,
-                    counterpartyNickname: t.counterpartyNickname,
-                    note: t.note ?? null,
-                } },
+                { $set: mapMercuryTransactionToUpsert(accountId, t) },
                 { upsert: true }
             )));
 
@@ -215,6 +202,7 @@ export function createMercuryReconciliationRouter({
                 Amount: String(t.amount),
                 mercuryTransactionId: t.id,
                 mercurySuggestedTaxCategory: suggestTaxCategory(t.categoryData?.name),
+                dashboardLink: t.dashboardLink ?? null,
             }));
             const result = await reconcileRows(rows);
             res.json({ ...result, parseErrors: [] });

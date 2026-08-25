@@ -7,7 +7,7 @@ type ImportResult = {
   matched: { bankRow: Record<string, string>; journalEntryId: string; lineIndex: number }[];
   suggested: { bankRow: Record<string, string>; journalEntryId: string; lineIndex: number; confidence: number; reasons: string[] }[];
   unmatched: { journalEntryId: string; lineIndex: number; date: string; amount: number }[];
-  missing: { bankRow: Record<string, string> & { mercuryTransactionId?: string; mercurySuggestedTaxCategory?: string } }[];
+  missing: { bankRow: Record<string, string> & { mercuryTransactionId?: string; mercurySuggestedTaxCategory?: string; dashboardLink?: string } }[];
   parseErrors: { row: number; message: string }[];
 };
 
@@ -257,7 +257,15 @@ export function ReconciliationTab() {
                 <div className="min-w-0">
                   <div>{m.bankRow.Date} — {m.bankRow.Description} — ${m.bankRow.Amount}</div>
                   {m.bankRow.mercurySuggestedTaxCategory && (
-                    <div className="text-[11px] text-gray-400">Categoría sugerida: {m.bankRow.mercurySuggestedTaxCategory}</div>
+                    <div className="text-[11px] text-gray-400">
+                      Categoría sugerida: {m.bankRow.mercurySuggestedTaxCategory}
+                      {m.bankRow.dashboardLink && (
+                        <>
+                          {' · '}
+                          <a href={m.bankRow.dashboardLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">Ver en Mercury ↗</a>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
                 {m.bankRow.mercuryTransactionId && Number(m.bankRow.Amount) < 0 && (
