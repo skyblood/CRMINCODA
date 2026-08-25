@@ -92,6 +92,7 @@ import reportsRouter from './routes/reports.js';
 import commissionsRouter from './routes/commissions.js';
 import { startInvoiceScheduler, getSchedulerHealth } from './jobs/invoiceScheduler.js';
 import { startLeadEnrichmentScheduler } from './jobs/leadEnrichmentScheduler.js';
+import { startMercurySyncScheduler } from './jobs/mercurySyncScheduler.js';
 import proposalTemplatesRouter from './routes/proposalTemplates.js';
 import aiReportsRouter from './routes/aiReports.js';
 import backupRouter from './routes/backup.js';
@@ -492,6 +493,7 @@ const start = async () => {
     schedulePeriodicNotifications();
     startInvoiceScheduler();
     startLeadEnrichmentScheduler();
+    startMercurySyncScheduler();
 };
 
 // Start server
