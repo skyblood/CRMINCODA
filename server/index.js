@@ -142,20 +142,37 @@ app.use(helmet({
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 // ── Rate limit helpers ────────────────────────────────────────────────────────
-const makeLimit = (windowMs, max, message) => rateLimit({
+// extraSkip lets a specific tier bypass a broader tier it's nested under (e.g.
+// Tier 1's global bucket exempting /api/health, which has its own tier below) —
+// without it, both limiters would run and the narrower one couldn't matter.
+const makeLimit = (windowMs, max, message, extraSkip) => rateLimit({
     windowMs,
     max,
     standardHeaders: true,   // RateLimit-* headers (RFC 6585)
     legacyHeaders: false,
     message: { error: message },
-    skip: () => !IS_PROD,    // disabled in development
+    skip: (req) => !IS_PROD || (extraSkip ? extraSkip(req) : false),
 });
 
+// ── Tier 0 — Health check — very generous, exempted from Tier 1's shared bucket ─
+// The frontend's own connectivity poller (services/apiService.ts) hits this
+// every 15s indefinitely for as long as a tab is open, and external uptime
+// monitors may also probe it — sharing Tier 1's budget let this background
+// traffic alone exhaust the quota and 429 every other endpoint on the same IP.
+app.use('/api/health', makeLimit(
+    15 * 60 * 1000, 2000,
+    'Too many health check requests.'
+));
+
 // ── Tier 1 — Global fallback (all /api/* not matched below) ──────────────────
-// 300 req / 15 min per IP — covers normal CRM usage across all modules
+// 300 req / 15 min per IP — covers normal CRM usage across all modules.
+// /api/health is exempted (see Tier 0 above) since it's polled continuously by
+// design; req.path here is relative to the '/api/' mount point, so a request to
+// /api/health/... is seen as /health/... inside this middleware.
 app.use('/api/', makeLimit(
     15 * 60 * 1000, 300,
-    'Too many requests. Please slow down.'
+    'Too many requests. Please slow down.',
+    (req) => req.path.startsWith('/health')
 ));
 
 // ── Tier 2 — Read routes (GET only) — generous ───────────────────────────────
