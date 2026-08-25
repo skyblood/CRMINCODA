@@ -164,30 +164,43 @@ app.use('/api/health', makeLimit(
     'Too many health check requests.'
 ));
 
-// ── Tier 1 — Global fallback (all /api/* not matched below) ──────────────────
-// 300 req / 15 min per IP — covers normal CRM usage across all modules.
-// /api/health is exempted (see Tier 0 above) since it's polled continuously by
-// design; req.path here is relative to the '/api/' mount point, so a request to
-// /api/health/... is seen as /health/... inside this middleware.
-app.use('/api/', makeLimit(
-    15 * 60 * 1000, 300,
-    'Too many requests. Please slow down.',
-    (req) => req.path.startsWith('/health')
-));
-
 // ── Tier 2 — Read routes (GET only) — generous ───────────────────────────────
-// Frontend polls subscriptions; allow up to 600 GETs / 15 min
+// Frontend polls subscriptions (services/apiService.ts starts a 30s poll per
+// subscribed collection, on top of WebSocket updates); allow up to 600 GETs /
+// 15 min per route. Declared before Tier 1 so its skip logic (below) can
+// exempt every one of these paths from Tier 1's much tighter shared budget.
 const readRoutes = [
     '/api/leads', '/api/projects', '/api/users', '/api/contacts',
     '/api/transactions', '/api/skus', '/api/templates', '/api/goals',
     '/api/balanceSheetAccounts', '/api/balanceSheetNotes',
     '/api/accounts', '/api/activities', '/api/automations',
     '/api/ledger-accounts', '/api/journal-entries', '/api/ledger-reports',
+    '/api/pipelines', '/api/notifications', '/api/mercury-import',
 ];
 readRoutes.forEach(route => {
     app.get(route, makeLimit(15 * 60 * 1000, 600, 'Too many read requests.'));
     app.get(`${route}/:id`, makeLimit(15 * 60 * 1000, 600, 'Too many read requests.'));
 });
+
+// ── Tier 1 — Global fallback (only /api/* paths not covered by a tier of
+// their own) ───────────────────────────────────────────────────────────────
+// 300 req / 15 min per IP. This is meant to be a true fallback, but since
+// app.use('/api/', ...) registers before every per-route tier below and
+// Express runs every matching middleware in registration order, Tier 1 used
+// to run FIRST for every request regardless of a route's own, more generous
+// tier — its far tighter budget was the actual bottleneck everywhere. That's
+// what let 13 always-on background subscription polls (services/
+// apiService.ts, one 30s interval per subscribed collection) alone exhaust
+// the shared 300-request budget well inside 15 minutes on a single open tab,
+// 429-ing unrelated requests (including Mercury reconciliation) as collateral
+// damage. Exempt every route with its own dedicated tier (Tier 0's /health,
+// Tier 2's readRoutes) so Tier 1 only governs genuinely uncategorized paths.
+const TIER_EXEMPT_PREFIXES = ['/health', ...readRoutes.map(r => r.replace(/^\/api/, ''))];
+app.use('/api/', makeLimit(
+    15 * 60 * 1000, 300,
+    'Too many requests. Please slow down.',
+    (req) => TIER_EXEMPT_PREFIXES.some(prefix => req.path === prefix || req.path.startsWith(`${prefix}/`))
+));
 
 // ── Tier 3 — Write routes (POST/PUT/DELETE) — moderate ───────────────────────
 // 60 mutations / 15 min per IP across all data routes
@@ -204,6 +217,16 @@ dataRoutes.forEach(route => {
     app.put(`${route}/:id`, writeLimit);
     app.delete(`${route}/:id`, writeLimit);
 });
+
+// mercury-import's mutating actions live at named sub-paths (/confirm-match,
+// /sync, /approve), not the generic collection+':id' shape dataRoutes assumes
+// above — and Tier 1 now exempts the whole /api/mercury-import prefix (Tier 2
+// only covers its GETs), so these need explicit write-tier coverage or they'd
+// be completely unrated-limited rather than merely under the wrong tier.
+app.post('/api/mercury-import', writeLimit);
+app.post('/api/mercury-import/confirm-match', writeLimit);
+app.post('/api/mercury-import/sync', writeLimit);
+app.post('/api/mercury-import/approve', writeLimit);
 
 // ── Tier 4 — Auth routes — strict ────────────────────────────────────────────
 // Login:        10 attempts / 15 min  (brute-force protection)
