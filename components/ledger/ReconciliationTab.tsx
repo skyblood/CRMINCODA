@@ -159,6 +159,50 @@ export function ReconciliationTab() {
     setApprovedRows(rows => [{ mercuryTransactionId, bankRow, taxCategory: body.taxCategory }, ...rows]);
   };
 
+  const [bulkApproving, setBulkApproving] = useState(false);
+
+  const approveAllMissing = async () => {
+    if (!result) return;
+    const eligible = result.missing.filter(m => m.bankRow.mercuryTransactionId && Number(m.bankRow.Amount) < 0);
+    if (eligible.length === 0) return;
+
+    setBulkApproving(true);
+    setError('');
+    try {
+      const res = await apiFetch('/api/mercury-import/approve-many', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: eligible.map(m => ({ mercuryTransactionId: m.bankRow.mercuryTransactionId, taxCategory: categoryFor(m.bankRow) })),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
+        setError(body.error || 'No se pudo aprobar en lote.');
+        return;
+      }
+      const body = await res.json();
+      const approvedIds = new Set(body.results.filter((r: any) => r.status === 'approved').map((r: any) => r.mercuryTransactionId));
+      const failedResults = body.results.filter((r: any) => r.status === 'error');
+
+      if (failedResults.length > 0) {
+        setError(`${failedResults.length} de ${eligible.length} no se pudieron aprobar: ${failedResults.map((r: any) => r.error).join('; ')}`);
+      }
+
+      const newlyApproved: ApprovedRow[] = eligible
+        .filter(m => approvedIds.has(m.bankRow.mercuryTransactionId))
+        .map(m => {
+          const r = body.results.find((x: any) => x.mercuryTransactionId === m.bankRow.mercuryTransactionId);
+          return { mercuryTransactionId: m.bankRow.mercuryTransactionId!, bankRow: m.bankRow, taxCategory: r.taxCategory };
+        });
+
+      setResult(r => r ? { ...r, missing: r.missing.filter(m => !approvedIds.has(m.bankRow.mercuryTransactionId)) } : r);
+      setApprovedRows(rows => [...newlyApproved, ...rows]);
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
   const undoApprove = async (mercuryTransactionId: string) => {
     setError('');
     const res = await apiFetch('/api/mercury-import/unapprove', {
@@ -267,6 +311,15 @@ export function ReconciliationTab() {
           <div>
             <h3 className="flex items-center gap-2 font-semibold text-red-700 mb-2"><HelpCircle size={16} /> Faltantes en el libro ({result.missing.length})</h3>
             <p className="text-xs text-gray-500 mb-2">Movimientos del banco sin asiento contable — crea el gasto/asiento correspondiente en la pestaña Gastos de la Empresa o Libro Diario.</p>
+            {result.missing.some(m => m.bankRow.mercuryTransactionId && Number(m.bankRow.Amount) < 0) && (
+              <button
+                onClick={approveAllMissing}
+                disabled={bulkApproving}
+                className="text-xs text-white bg-purple-700 hover:bg-purple-800 disabled:opacity-50 rounded-lg px-3 py-1.5 mb-3"
+              >
+                {bulkApproving ? 'Aprobando...' : `Aprobar todas (${result.missing.filter(m => m.bankRow.mercuryTransactionId && Number(m.bankRow.Amount) < 0).length})`}
+              </button>
+            )}
             {result.missing.map((m, i) => (
               <div key={i} className="flex items-center justify-between text-sm border-b border-gray-100 py-2 gap-3">
                 <div className="min-w-0">

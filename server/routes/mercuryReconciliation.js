@@ -121,6 +121,84 @@ async function reconcileRows(rows) {
     return { matched, unmatched, missing: finalMissing, suggested };
 }
 
+// httpStatus travels with every error result so /approve can map it back to
+// the exact status code the pre-refactor inline handler used — a generic/
+// unexpected error (anything other than the sign guard, an invalid
+// taxCategory override, or a posting failure) must still surface as 500, not
+// be silently reclassified as a 502 "known integration failure". Getting
+// this wrong is easy (string-matching the error message instead) and easy to
+// miss in review since no pre-existing test exercises a truly unexpected
+// Transaction.create() failure — verified by re-deriving each branch's
+// status code against the pre-refactor handler line by line, not just by
+// running the existing test suite.
+async function approveOne(mtx, taxCategoryOverride) {
+    if (!(mtx.amount < 0)) {
+        return { status: 'error', httpStatus: 400, error: 'Solo los movimientos de salida se pueden aprobar como gasto.' };
+    }
+
+    let taxCategory = suggestTaxCategory(mtx.mercuryCategoryName);
+    if (typeof taxCategoryOverride === 'string' && taxCategoryOverride) {
+        const validAccount = await LedgerAccount.findOne({ type: 'expense', taxCategory: taxCategoryOverride }).lean();
+        if (!validAccount) return { status: 'error', httpStatus: 400, error: 'Invalid taxCategory' };
+        taxCategory = taxCategoryOverride;
+    }
+
+    const amount = Math.abs(mtx.amount);
+    const transactionId = `mercury_${mtx.mercuryTransactionId}`;
+    const postedAt = mtx.postedAt || mtx.mercuryCreatedAt || new Date();
+    const postingFailedMessage = 'El gasto se registró pero no se pudo contabilizar en el libro diario. Contacta soporte.';
+
+    try {
+        await Transaction.create({
+            id: transactionId,
+            title: mtx.description || mtx.counterpartyNickname || 'Mercury transaction',
+            amount,
+            amountUSD: amount,
+            currency: 'USD',
+            exchangeRateToUSD: 1,
+            date: new Date(postedAt).toISOString().split('T')[0],
+            dateObj: postedAt,
+            type: 'expense',
+            category: 'other',
+            taxCategory,
+            description: mtx.description || '',
+        });
+
+        const entry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
+        if (!entry) return { status: 'error', httpStatus: 502, error: postingFailedMessage };
+        return { status: 'approved', id: transactionId, taxCategory };
+    } catch (err) {
+        if (err.code === 11000) {
+            const existingEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
+            if (existingEntry) {
+                return { status: 'approved', id: transactionId, taxCategory, alreadyApproved: true };
+            }
+
+            const existingTx = await Transaction.findOne({ id: transactionId }).lean();
+            if (existingTx) {
+                try {
+                    await postExpense(existingTx);
+                } catch (postErr) {
+                    console.error(`[mercury-approve] retry posting failed for ${transactionId}:`, postErr.stack || postErr);
+                }
+            }
+
+            const retryEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
+            if (!retryEntry) return { status: 'error', httpStatus: 502, error: postingFailedMessage };
+            if (existingTx) {
+                await Transaction.updateOne({ id: transactionId }, { $set: { postingStatus: 'posted' } }).catch(() => {});
+            }
+            return { status: 'approved', id: transactionId, taxCategory, alreadyApproved: true };
+        }
+        // Any other error (e.g. a Mongo write failure unrelated to a
+        // duplicate key) — the pre-refactor handler let this propagate to
+        // its own outer catch, which always responded 500. Preserve that
+        // exactly via an explicit httpStatus rather than re-deriving it from
+        // the error message.
+        return { status: 'error', httpStatus: 500, error: err.message };
+    }
+}
+
 export function createMercuryReconciliationRouter({
     mercuryListAccounts = listAccounts,
     mercuryListTransactions = listAccountTransactions,
@@ -213,99 +291,50 @@ export function createMercuryReconciliationRouter({
 
     scopedRouter.post('/approve', async (req, res) => {
         try {
-            const { mercuryTransactionId } = req.body;
+            const { mercuryTransactionId, taxCategory } = req.body;
             if (typeof mercuryTransactionId !== 'string' || !mercuryTransactionId) {
                 return res.status(400).json({ error: 'mercuryTransactionId is required' });
             }
             const mtx = await MercuryTransaction.findOne({ mercuryTransactionId }).lean();
             if (!mtx) return res.status(404).json({ error: 'Mercury transaction not found' });
 
-            // Only outgoing (negative) Mercury transactions may be approved as an
-            // expense. A positive/incoming transaction booked as `type: 'expense'`
-            // would double-count as money leaving (a fake expense debit AND a Cash
-            // credit) when it actually came in — see Finding 1 of the final review.
-            if (!(mtx.amount < 0)) {
-                return res.status(400).json({ error: 'Solo los movimientos de salida se pueden aprobar como gasto.' });
+            const result = await approveOne(mtx, taxCategory);
+            if (result.status === 'error') {
+                return res.status(result.httpStatus).json({ error: result.error });
+            }
+            res.status(result.alreadyApproved ? 200 : 201).json({ id: result.id, taxCategory: result.taxCategory, ...(result.alreadyApproved ? { alreadyApproved: true } : {}) });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    scopedRouter.post('/approve-many', async (req, res) => {
+        try {
+            const { items } = req.body;
+            if (!Array.isArray(items) || items.length === 0) {
+                return res.status(400).json({ error: 'items (non-empty array) is required' });
+            }
+            if (items.length > 100) {
+                return res.status(400).json({ error: 'Cannot approve more than 100 items in one call' });
             }
 
-            let taxCategory = suggestTaxCategory(mtx.mercuryCategoryName);
-            if (typeof req.body.taxCategory === 'string' && req.body.taxCategory) {
-                const validAccount = await LedgerAccount.findOne({ type: 'expense', taxCategory: req.body.taxCategory }).lean();
-                if (!validAccount) return res.status(400).json({ error: 'Invalid taxCategory' });
-                taxCategory = req.body.taxCategory;
-            }
-            const amount = Math.abs(mtx.amount);
-            const transactionId = `mercury_${mercuryTransactionId}`;
-            const postedAt = mtx.postedAt || mtx.mercuryCreatedAt || new Date();
-
-            const postingFailedMessage = 'El gasto se registró pero no se pudo contabilizar en el libro diario. Contacta soporte.';
-
-            try {
-                await Transaction.create({
-                    id: transactionId,
-                    title: mtx.description || mtx.counterpartyNickname || 'Mercury transaction',
-                    amount,
-                    amountUSD: amount,
-                    currency: 'USD',
-                    exchangeRateToUSD: 1,
-                    date: new Date(postedAt).toISOString().split('T')[0],
-                    dateObj: postedAt,
-                    type: 'expense',
-                    category: 'other',
-                    taxCategory,
-                    description: mtx.description || '',
-                });
-
-                // Transaction.create() awaits the model's post('save') hook (see
-                // server/models/Transaction.js), so by the time we get here the
-                // ledger-posting attempt has already finished, successfully or not.
-                // The hook swallows posting failures rather than throwing (so the
-                // Transaction write itself is never blocked/lost), which means we
-                // must check the outcome explicitly instead of trusting a 201.
-                // We check for the JournalEntry directly rather than trusting
-                // postingStatus alone: if the poster succeeds but the subsequent
-                // postingStatus='posted' write fails, the hook logs and leaves the
-                // status stale (never sets 'failed' in that case) — checking for
-                // the JournalEntry itself is the one source of truth for whether
-                // posting actually happened. See Finding 3 of the final review.
-                const entry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
-                if (!entry) {
-                    return res.status(502).json({ error: postingFailedMessage });
+            const results = [];
+            for (const item of items) {
+                const { mercuryTransactionId, taxCategory } = item || {};
+                if (typeof mercuryTransactionId !== 'string' || !mercuryTransactionId) {
+                    results.push({ mercuryTransactionId: mercuryTransactionId ?? null, status: 'error', error: 'mercuryTransactionId is required' });
+                    continue;
                 }
-                res.status(201).json({ id: transactionId, taxCategory });
-            } catch (err) {
-                if (err.code === 11000) {
-                    // The Transaction already exists (this is a retry). Don't just
-                    // assume its original posting succeeded — check for the
-                    // JournalEntry, and if it's missing, self-heal by retrying the
-                    // post directly. postExpense() is idempotent via its own
-                    // alreadyPosted() check, so calling it again is safe even if it
-                    // races with another in-flight attempt.
-                    const existingEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
-                    if (existingEntry) {
-                        return res.status(200).json({ id: transactionId, taxCategory, alreadyApproved: true });
-                    }
-
-                    const existingTx = await Transaction.findOne({ id: transactionId }).lean();
-                    if (existingTx) {
-                        try {
-                            await postExpense(existingTx);
-                        } catch (postErr) {
-                            console.error(`[mercury-approve] retry posting failed for ${transactionId}:`, postErr.stack || postErr);
-                        }
-                    }
-
-                    const retryEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
-                    if (!retryEntry) {
-                        return res.status(502).json({ error: postingFailedMessage });
-                    }
-                    if (existingTx) {
-                        await Transaction.updateOne({ id: transactionId }, { $set: { postingStatus: 'posted' } }).catch(() => {});
-                    }
-                    return res.status(200).json({ id: transactionId, taxCategory, alreadyApproved: true });
+                const mtx = await MercuryTransaction.findOne({ mercuryTransactionId }).lean();
+                if (!mtx) {
+                    results.push({ mercuryTransactionId, status: 'error', error: 'Mercury transaction not found' });
+                    continue;
                 }
-                throw err;
+                const result = await approveOne(mtx, taxCategory);
+                results.push({ mercuryTransactionId, ...result });
             }
+
+            res.status(200).json({ results });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }

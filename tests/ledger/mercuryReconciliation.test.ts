@@ -683,3 +683,62 @@ describe('POST /api/mercury-import/unapprove', () => {
     assert.equal(voidEntries, 1);
   });
 });
+
+describe('POST /api/mercury-import/approve-many', () => {
+  it('rejects a request with no items array', async () => {
+    const res = await request(app).post('/api/mercury-import/approve-many').send({});
+    assert.equal(res.status, 400);
+  });
+
+  it('rejects a request with more than 100 items', async () => {
+    const items = Array.from({ length: 101 }, (_, i) => ({ mercuryTransactionId: `tx_${i}` }));
+    const res = await request(app).post('/api/mercury-import/approve-many').send({ items });
+    assert.equal(res.status, 400);
+  });
+
+  it('approves every item in a batch, each with its own taxCategory', async () => {
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_1', amount: -10, status: 'sent', postedAt: new Date('2026-07-05'), description: 'A', mercuryCategoryName: 'Bank Fees' });
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_2', amount: -20, status: 'sent', postedAt: new Date('2026-07-06'), description: 'B', mercuryCategoryName: 'Payroll' });
+
+    const res = await request(app).post('/api/mercury-import/approve-many').send({
+      items: [
+        { mercuryTransactionId: 'tx_bulk_1', taxCategory: 'Travel' },
+        { mercuryTransactionId: 'tx_bulk_2' }, // no override — uses suggested (Contract Labor)
+      ],
+    });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.results.length, 2);
+    const r1 = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_1');
+    const r2 = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_2');
+    assert.equal(r1.status, 'approved');
+    assert.equal(r1.taxCategory, 'Travel');
+    assert.equal(r2.status, 'approved');
+    assert.equal(r2.taxCategory, 'Contract Labor');
+
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_1' }).lean());
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_2' }).lean());
+  });
+
+  it('reports a per-item error without blocking the rest of the batch', async () => {
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_3', amount: -30, status: 'sent', postedAt: new Date('2026-07-05'), description: 'C', mercuryCategoryName: 'Bank Fees' });
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_incoming', amount: 500, status: 'sent', postedAt: new Date('2026-07-05'), description: 'Incoming', mercuryCategoryName: 'Revenue' });
+
+    const res = await request(app).post('/api/mercury-import/approve-many').send({
+      items: [
+        { mercuryTransactionId: 'tx_bulk_3' },
+        { mercuryTransactionId: 'tx_bulk_incoming' }, // positive amount — must fail its own sign guard
+      ],
+    });
+
+    assert.equal(res.status, 200);
+    const ok = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_3');
+    const failed = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_incoming');
+    assert.equal(ok.status, 'approved');
+    assert.equal(failed.status, 'error');
+    assert.ok(failed.error);
+
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_3' }).lean());
+    assert.equal(await Transaction.findOne({ id: 'mercury_tx_bulk_incoming' }).lean(), null);
+  });
+});
