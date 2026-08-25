@@ -10,10 +10,21 @@ export const MERCURY_CATEGORY_TO_TAX_CATEGORY = {
   'Bank Fees': 'Other Expenses',
   'Payment Processing Fees': 'Other Expenses',
   'Travel & Transportation': 'Travel',
-  'Rent & Utilities': 'Rent',
+  // Mercury's 'Rent & Utilities' bundles two Schedule C lines (Rent, line 20b,
+  // and Utilities, line 25) with no reliable signal here to split them —
+  // mapping to either specific line risks confidently mis-filing a real
+  // utility bill onto Rent (or vice versa). 'Other Expenses' is the
+  // intentional safe fallback used throughout this feature; a row that lands
+  // there is easy to catch and fix, unlike one silently posted to the wrong
+  // specific line. See Finding 4 of the final review.
+  'Rent & Utilities': 'Other Expenses',
   'Office Supplies & Equipment': 'Supplies',
   'Legal & Professional Services': 'Legal & Professional Services',
-  'Revenue': 'Other Expenses',
+  // No entry for 'Revenue': incoming Mercury transactions are rejected by
+  // POST /approve's sign guard (mtx.amount must be negative) before this map
+  // is ever consulted for one, so a dedicated mapping here would be
+  // misleading — it falls through to the 'Other Expenses' default below,
+  // which is moot since a Revenue-categorized row can never reach approval.
 };
 
 export function suggestTaxCategory(mercuryCategoryName) {
