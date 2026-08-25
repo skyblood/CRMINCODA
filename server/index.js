@@ -219,16 +219,20 @@ dataRoutes.forEach(route => {
 });
 
 // mercury-import's mutating actions live at named sub-paths (/confirm-match,
-// /sync, /approve), not the generic collection+':id' shape dataRoutes assumes
-// above — and Tier 1 now exempts the whole /api/mercury-import prefix (Tier 2
-// only covers its GETs), so these need explicit write-tier coverage or they'd
-// be completely unrated-limited rather than merely under the wrong tier.
-app.post('/api/mercury-import', writeLimit);
-app.post('/api/mercury-import/confirm-match', writeLimit);
-app.post('/api/mercury-import/sync', writeLimit);
-app.post('/api/mercury-import/approve', writeLimit);
-app.post('/api/mercury-import/approve-many', writeLimit);
-app.post('/api/mercury-import/unapprove', writeLimit);
+// /sync, /approve, /approve-many, /unapprove), not the generic
+// collection+':id' shape dataRoutes assumes above — and Tier 1 exempts the
+// whole /api/mercury-import prefix (Tier 2 only covers its GETs), so these
+// need explicit write-tier coverage or they'd be completely unrate-limited.
+// A dedicated (not the shared writeLimit) budget: bulk approve can post up
+// to 100 mutations in a single user action, well past the shared tier's
+// 60/15min.
+const mercuryWriteLimit = makeLimit(15 * 60 * 1000, 300, 'Too many Mercury actions. Please wait before approving more.');
+app.post('/api/mercury-import', mercuryWriteLimit);
+app.post('/api/mercury-import/confirm-match', mercuryWriteLimit);
+app.post('/api/mercury-import/sync', mercuryWriteLimit);
+app.post('/api/mercury-import/approve', mercuryWriteLimit);
+app.post('/api/mercury-import/approve-many', mercuryWriteLimit);
+app.post('/api/mercury-import/unapprove', mercuryWriteLimit);
 
 // ── Tier 4 — Auth routes — strict ────────────────────────────────────────────
 // Login:        10 attempts / 15 min  (brute-force protection)
