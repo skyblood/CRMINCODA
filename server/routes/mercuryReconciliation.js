@@ -8,7 +8,7 @@ import MercuryTransaction from '../models/MercuryTransaction.js';
 import { listAccounts, listAccountTransactions } from '../services/mercuryApiClient.js';
 import Transaction from '../models/Transaction.js';
 import { suggestTaxCategory } from '../seed/mercuryCategoryMap.js';
-import { postExpense } from '../services/ledgerPostingService.js';
+import { postExpense, isPeriodClosed } from '../services/ledgerPostingService.js';
 
 const SUGGESTION_THRESHOLD = 0.5;
 
@@ -275,7 +275,7 @@ export function createMercuryReconciliationRouter({
                 // status stale (never sets 'failed' in that case) — checking for
                 // the JournalEntry itself is the one source of truth for whether
                 // posting actually happened. See Finding 3 of the final review.
-                const entry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId }).lean();
+                const entry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
                 if (!entry) {
                     return res.status(502).json({ error: postingFailedMessage });
                 }
@@ -288,7 +288,7 @@ export function createMercuryReconciliationRouter({
                     // post directly. postExpense() is idempotent via its own
                     // alreadyPosted() check, so calling it again is safe even if it
                     // races with another in-flight attempt.
-                    const existingEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId }).lean();
+                    const existingEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
                     if (existingEntry) {
                         return res.status(200).json({ id: transactionId, taxCategory, alreadyApproved: true });
                     }
@@ -302,7 +302,7 @@ export function createMercuryReconciliationRouter({
                         }
                     }
 
-                    const retryEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId }).lean();
+                    const retryEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
                     if (!retryEntry) {
                         return res.status(502).json({ error: postingFailedMessage });
                     }
@@ -313,6 +313,36 @@ export function createMercuryReconciliationRouter({
                 }
                 throw err;
             }
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── UNDO an approval — voids the posted JournalEntry (never hard-deleted,
+    // same convention as /api/journal-entries/:id/void) and deletes the
+    // synthetic Transaction, so a later re-approval starts clean instead of
+    // colliding with the old deterministic id.
+    scopedRouter.post('/unapprove', async (req, res) => {
+        try {
+            const { mercuryTransactionId } = req.body;
+            if (typeof mercuryTransactionId !== 'string' || !mercuryTransactionId) {
+                return res.status(400).json({ error: 'mercuryTransactionId is required' });
+            }
+            const transactionId = `mercury_${mercuryTransactionId}`;
+            const tx = await Transaction.findOne({ id: transactionId }).lean();
+            if (!tx) return res.status(404).json({ error: 'This transaction was not approved' });
+
+            const entry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } });
+            if (entry) {
+                if (await isPeriodClosed(entry.date)) {
+                    return res.status(409).json({ error: 'Cannot undo: the accounting period for this entry is closed. Reopen the period first.' });
+                }
+                entry.status = 'void';
+                await entry.save();
+            }
+
+            await Transaction.deleteOne({ id: transactionId });
+            res.json({ id: transactionId, undone: true });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }

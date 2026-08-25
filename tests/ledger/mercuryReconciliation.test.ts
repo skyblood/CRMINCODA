@@ -9,6 +9,7 @@ import JournalEntry from '../../server/models/JournalEntry.js';
 import MercuryTransaction from '../../server/models/MercuryTransaction.js';
 import Transaction from '../../server/models/Transaction.js';
 import LedgerAccount from '../../server/models/LedgerAccount.js';
+import LedgerPeriodClose from '../../server/models/LedgerPeriodClose.js';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../../server/seed/chartOfAccounts.js';
 
 const app = express();
@@ -560,5 +561,80 @@ describe('POST /api/mercury-import/approve', () => {
 
     const tx = await Transaction.findOne({ id: 'mercury_tx_fail_2' }).lean();
     assert.equal(tx?.postingStatus, 'posted');
+  });
+});
+
+describe('POST /api/mercury-import/unapprove', () => {
+  it('rejects a request with no mercuryTransactionId', async () => {
+    const res = await request(app).post('/api/mercury-import/unapprove').send({});
+    assert.equal(res.status, 400);
+  });
+
+  it('returns 404 when the Mercury transaction was never approved (no Transaction exists)', async () => {
+    const res = await request(app).post('/api/mercury-import/unapprove').send({ mercuryTransactionId: 'never-approved' });
+    assert.equal(res.status, 404);
+  });
+
+  it('voids the JournalEntry and deletes the Transaction on a successful undo', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_undo_1',
+      amount: -80, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Undo me', mercuryCategoryName: 'Bank Fees',
+    });
+    const approveRes = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_undo_1' });
+    assert.equal(approveRes.status, 201);
+
+    const res = await request(app).post('/api/mercury-import/unapprove').send({ mercuryTransactionId: 'tx_undo_1' });
+    assert.equal(res.status, 200);
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_undo_1' }).lean();
+    assert.equal(tx, null, 'the synthetic Transaction should be deleted');
+
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_undo_1' }).lean();
+    assert.ok(entry, 'the JournalEntry itself must never be hard-deleted');
+    assert.equal(entry?.status, 'void');
+  });
+
+  it('refuses to undo an approval whose accounting period is already closed', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_undo_closed',
+      amount: -50, status: 'sent', postedAt: new Date('2026-06-10'),
+      description: 'In a closed period', mercuryCategoryName: 'Bank Fees',
+    });
+    const approveRes = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_undo_closed' });
+    assert.equal(approveRes.status, 201);
+
+    await LedgerPeriodClose.create({ id: 'close_2026_06', year: 2026, month: 6 });
+
+    const res = await request(app).post('/api/mercury-import/unapprove').send({ mercuryTransactionId: 'tx_undo_closed' });
+    assert.equal(res.status, 409);
+
+    // Nothing should have been touched.
+    const tx = await Transaction.findOne({ id: 'mercury_tx_undo_closed' }).lean();
+    assert.ok(tx, 'the Transaction must survive a refused undo');
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_undo_closed' }).lean();
+    assert.equal(entry?.status, 'posted');
+  });
+
+  it('lets a freshly re-approved transaction post a brand-new JournalEntry after undo (not a stale "already approved")', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_reapprove_1',
+      amount: -25, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Approve, undo, approve again', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const firstApprove = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_reapprove_1' });
+    assert.equal(firstApprove.status, 201);
+
+    await request(app).post('/api/mercury-import/unapprove').send({ mercuryTransactionId: 'tx_reapprove_1' });
+
+    const secondApprove = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_reapprove_1' });
+    assert.equal(secondApprove.status, 201, 'a re-approval after undo must post fresh, not be treated as a stale duplicate');
+    assert.equal(secondApprove.body.alreadyApproved, undefined);
+
+    const postedEntries = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'mercury_tx_reapprove_1', status: 'posted' });
+    assert.equal(postedEntries, 1);
+    const voidEntries = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'mercury_tx_reapprove_1', status: 'void' });
+    assert.equal(voidEntries, 1);
   });
 });

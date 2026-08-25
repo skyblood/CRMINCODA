@@ -1,6 +1,6 @@
 // components/ledger/ReconciliationTab.tsx
 import React, { useState, useEffect } from 'react';
-import { Upload, CheckCircle, AlertTriangle, HelpCircle, Sparkles, RefreshCw } from 'lucide-react';
+import { Upload, CheckCircle, AlertTriangle, HelpCircle, Sparkles, RefreshCw, Undo2 } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 
 type ImportResult = {
@@ -12,6 +12,12 @@ type ImportResult = {
 };
 
 type MercuryAccount = { id: string; name: string; type: string };
+
+// Approved this session, in memory only — the backend has no "approved"
+// list of its own (once approved, a row simply disappears from `missing`
+// on the next sync since its JournalEntry now matches). Kept here purely
+// so the user has a short window to click "Deshacer" without re-syncing.
+type ApprovedRow = { mercuryTransactionId: string; bankRow: Record<string, string>; taxCategory: string };
 
 function defaultDateRange() {
   const end = new Date();
@@ -30,6 +36,7 @@ export function ReconciliationTab() {
   const [{ start, end }, setDateRange] = useState(defaultDateRange());
   const [syncing, setSyncing] = useState(false);
   const [accountsError, setAccountsError] = useState('');
+  const [approvedRows, setApprovedRows] = useState<ApprovedRow[]>([]);
 
   useEffect(() => {
     apiFetch('/api/mercury-import/accounts')
@@ -117,7 +124,7 @@ export function ReconciliationTab() {
     } : r);
   };
 
-  const approveMissing = async (mercuryTransactionId: string) => {
+  const approveMissing = async (mercuryTransactionId: string, bankRow: Record<string, string>) => {
     setError('');
     const res = await apiFetch('/api/mercury-import/approve', {
       method: 'POST',
@@ -129,10 +136,27 @@ export function ReconciliationTab() {
       setError(body.error || 'No se pudo aprobar el gasto.');
       return;
     }
+    const body = await res.json().catch(() => ({ taxCategory: bankRow.mercurySuggestedTaxCategory || '' }));
     setResult(r => r ? {
       ...r,
       missing: r.missing.filter(m => m.bankRow.mercuryTransactionId !== mercuryTransactionId),
     } : r);
+    setApprovedRows(rows => [{ mercuryTransactionId, bankRow, taxCategory: body.taxCategory }, ...rows]);
+  };
+
+  const undoApprove = async (mercuryTransactionId: string) => {
+    setError('');
+    const res = await apiFetch('/api/mercury-import/unapprove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mercuryTransactionId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
+      setError(body.error || 'No se pudo deshacer la aprobación.');
+      return;
+    }
+    setApprovedRows(rows => rows.filter(r => r.mercuryTransactionId !== mercuryTransactionId));
   };
 
   return (
@@ -238,7 +262,7 @@ export function ReconciliationTab() {
                 </div>
                 {m.bankRow.mercuryTransactionId && Number(m.bankRow.Amount) < 0 && (
                   <button
-                    onClick={() => approveMissing(m.bankRow.mercuryTransactionId!)}
+                    onClick={() => approveMissing(m.bankRow.mercuryTransactionId!, m.bankRow)}
                     className="text-purple-700 text-xs whitespace-nowrap flex-shrink-0"
                   >
                     Aprobar
@@ -247,6 +271,27 @@ export function ReconciliationTab() {
               </div>
             ))}
           </div>
+
+          {approvedRows.length > 0 && (
+            <div>
+              <h3 className="flex items-center gap-2 font-semibold text-green-700 mb-2"><CheckCircle size={16} /> Aprobados recientemente ({approvedRows.length})</h3>
+              <p className="text-xs text-gray-500 mb-2">Gastos creados y contabilizados en esta sesión — "Deshacer" anula el asiento y borra el gasto.</p>
+              {approvedRows.map(r => (
+                <div key={r.mercuryTransactionId} className="flex items-center justify-between text-sm border-b border-gray-100 py-2 gap-3">
+                  <div className="min-w-0">
+                    <div>{r.bankRow.Date} — {r.bankRow.Description} — ${r.bankRow.Amount}</div>
+                    <div className="text-[11px] text-gray-400">{r.taxCategory}</div>
+                  </div>
+                  <button
+                    onClick={() => undoApprove(r.mercuryTransactionId)}
+                    className="flex items-center gap-1 text-red-600 text-xs whitespace-nowrap flex-shrink-0"
+                  >
+                    <Undo2 size={12} /> Deshacer
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import LedgerAccount from '../models/LedgerAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
+import LedgerPeriodClose from '../models/LedgerPeriodClose.js';
 import User from '../models/User.js';
 import { notifyAdmins } from '../notificationService.js';
 import { CATEGORY_TO_ACCOUNT_CODE, CASH_ACCOUNT_CODE, INCOME_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
@@ -8,6 +9,22 @@ async function alreadyPosted(source, sourceId) {
     if (!sourceId) return false;
     const existing = await JournalEntry.findOne({ source, sourceId, status: { $ne: 'void' } }).lean();
     return !!existing;
+}
+
+// Shared with server/routes/journalEntries.js's own void/create-entry checks —
+// moved here so any caller that needs to know whether a date falls in a
+// closed accounting period (e.g. before voiding a Mercury-approved entry)
+// doesn't have to import from another route module.
+export async function isPeriodClosed(date) {
+    const d = new Date(date);
+    // Use UTC getters, not local-time getters: journal entry dates are
+    // stored/compared as UTC, but getFullYear()/getMonth() read local-time
+    // components. In any negative-UTC-offset timezone (e.g. America/Bogota,
+    // UTC-5) a date stored as e.g. 2026-01-01T00:00:00.000Z reads back as
+    // December 31, 2025 in local time, which would match/miss the wrong
+    // period close record (see Task 17 review Fix 4).
+    const closed = await LedgerPeriodClose.findOne({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 }).lean();
+    return !!closed;
 }
 
 function makeLine(accountId, amountNative, amountUSD, isDebit, opts = {}) {
