@@ -21,12 +21,14 @@ describe('MercuryTransaction', () => {
       mercuryCategoryName: 'Office Supplies & Equipment',
       kind: 'outgoingPayment',
       counterpartyNickname: 'AWS',
+      dashboardLink: 'https://mercury.com/transactions/abc',
     });
     assert.equal(doc.mercuryAccountId, 'acc_1');
     assert.equal(doc.amount, -42.5);
     assert.equal(doc.mercuryCategoryName, 'Office Supplies & Equipment');
     assert.equal(doc.kind, 'outgoingPayment');
     assert.equal(doc.counterpartyNickname, 'AWS');
+    assert.equal(doc.dashboardLink, 'https://mercury.com/transactions/abc');
   });
 
   it('upserting the same account+transaction id twice results in exactly one document, with fields updated', async () => {
@@ -44,5 +46,13 @@ describe('MercuryTransaction', () => {
     const key = { mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_1', amount: -1 };
     await MercuryTransaction.create(key);
     await assert.rejects(() => MercuryTransaction.create(key));
+  });
+
+  it('has a TTL index on createdAt so cached rows eventually expire', () => {
+    const indexes = MercuryTransaction.schema.indexes();
+    const ttlIndex = indexes.find(([, opts]) => typeof opts.expireAfterSeconds === 'number');
+    assert.ok(ttlIndex, 'expected a TTL index with expireAfterSeconds to exist');
+    assert.deepEqual(ttlIndex![0], { createdAt: 1 });
+    assert.equal(ttlIndex![1].expireAfterSeconds, 60 * 60 * 24 * 730);
   });
 });

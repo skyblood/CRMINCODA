@@ -18,6 +18,7 @@ const MercuryTransactionSchema = new mongoose.Schema({
   mercuryCategoryName: String,
   kind: String,
   counterpartyNickname: String,
+  dashboardLink: String,
   // Free-text note the Mercury user attaches per-transaction from Mercury's
   // own dashboard (e.g. "Cena cliente Cartagena") — the most human-authored,
   // meaningful context available on a transaction, when present.
@@ -28,5 +29,11 @@ MercuryTransactionSchema.index(
   { mercuryAccountId: 1, mercuryTransactionId: 1 },
   { unique: true }
 );
+
+// Cache rows expire after ~2 years — this is a reconciliation cache fed
+// fresh by every sync, not a system of record (the resulting JournalEntry
+// is the permanent record once a row is approved), so nothing depends on
+// rows surviving indefinitely.
+MercuryTransactionSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 730 });
 
 export default mongoose.model('MercuryTransaction', MercuryTransactionSchema);
