@@ -366,5 +366,8 @@ describe('POST /api/mercury-import/approve', () => {
 
     const count = await Transaction.countDocuments({ id: 'mercury_tx_approve_2' });
     assert.equal(count, 1);
+
+    const entryCount = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'mercury_tx_approve_2' });
+    assert.equal(entryCount, 1);
   });
 });
