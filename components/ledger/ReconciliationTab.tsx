@@ -7,7 +7,7 @@ type ImportResult = {
   matched: { bankRow: Record<string, string>; journalEntryId: string; lineIndex: number }[];
   suggested: { bankRow: Record<string, string>; journalEntryId: string; lineIndex: number; confidence: number; reasons: string[] }[];
   unmatched: { journalEntryId: string; lineIndex: number; date: string; amount: number }[];
-  missing: { bankRow: Record<string, string> }[];
+  missing: { bankRow: Record<string, string> & { mercuryTransactionId?: string; mercurySuggestedTaxCategory?: string } }[];
   parseErrors: { row: number; message: string }[];
 };
 
@@ -117,6 +117,24 @@ export function ReconciliationTab() {
     } : r);
   };
 
+  const approveMissing = async (mercuryTransactionId: string) => {
+    setError('');
+    const res = await apiFetch('/api/mercury-import/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mercuryTransactionId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
+      setError(body.error || 'No se pudo aprobar el gasto.');
+      return;
+    }
+    setResult(r => r ? {
+      ...r,
+      missing: r.missing.filter(m => m.bankRow.mercuryTransactionId !== mercuryTransactionId),
+    } : r);
+  };
+
   return (
     <div className="p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Conciliación Mercury</h2>
@@ -211,8 +229,21 @@ export function ReconciliationTab() {
             <h3 className="flex items-center gap-2 font-semibold text-red-700 mb-2"><HelpCircle size={16} /> Faltantes en el libro ({result.missing.length})</h3>
             <p className="text-xs text-gray-500 mb-2">Movimientos del banco sin asiento contable — crea el gasto/asiento correspondiente en la pestaña Gastos de la Empresa o Libro Diario.</p>
             {result.missing.map((m, i) => (
-              <div key={i} className="text-sm border-b border-gray-100 py-2">
-                {m.bankRow.Date} — {m.bankRow.Description} — ${m.bankRow.Amount}
+              <div key={i} className="flex items-center justify-between text-sm border-b border-gray-100 py-2 gap-3">
+                <div className="min-w-0">
+                  <div>{m.bankRow.Date} — {m.bankRow.Description} — ${m.bankRow.Amount}</div>
+                  {m.bankRow.mercurySuggestedTaxCategory && (
+                    <div className="text-[11px] text-gray-400">Categoría sugerida: {m.bankRow.mercurySuggestedTaxCategory}</div>
+                  )}
+                </div>
+                {m.bankRow.mercuryTransactionId && (
+                  <button
+                    onClick={() => approveMissing(m.bankRow.mercuryTransactionId!)}
+                    className="text-purple-700 text-xs whitespace-nowrap flex-shrink-0"
+                  >
+                    Aprobar
+                  </button>
+                )}
               </div>
             ))}
           </div>
