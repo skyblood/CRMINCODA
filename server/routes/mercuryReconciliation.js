@@ -6,6 +6,8 @@ import { CASH_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
 import { computeMatchScore } from '../utils/reconciliationScore.js';
 import MercuryTransaction from '../models/MercuryTransaction.js';
 import { listAccounts, listAccountTransactions } from '../services/mercuryApiClient.js';
+import Transaction from '../models/Transaction.js';
+import { suggestTaxCategory } from '../seed/mercuryCategoryMap.js';
 
 const SUGGESTION_THRESHOLD = 0.5;
 
@@ -173,6 +175,9 @@ export function createMercuryReconciliationRouter({
                     postedAt: t.postedAt,
                     description: t.description,
                     counterpartyName: t.counterpartyName,
+                    mercuryCategoryName: t.categoryData?.name ?? null,
+                    kind: t.kind,
+                    counterpartyNickname: t.counterpartyNickname,
                 } },
                 { upsert: true }
             )));
@@ -181,11 +186,54 @@ export function createMercuryReconciliationRouter({
                 Date: t.postedAt ?? t.createdAt,
                 Description: t.description ?? '',
                 Amount: String(t.amount),
+                mercuryTransactionId: t.id,
+                mercurySuggestedTaxCategory: suggestTaxCategory(t.categoryData?.name),
             }));
             const result = await reconcileRows(rows);
             res.json({ ...result, parseErrors: [] });
         } catch (err) {
             res.status(502).json({ error: err.message });
+        }
+    });
+
+    scopedRouter.post('/approve', async (req, res) => {
+        try {
+            const { mercuryTransactionId } = req.body;
+            if (typeof mercuryTransactionId !== 'string' || !mercuryTransactionId) {
+                return res.status(400).json({ error: 'mercuryTransactionId is required' });
+            }
+            const mtx = await MercuryTransaction.findOne({ mercuryTransactionId }).lean();
+            if (!mtx) return res.status(404).json({ error: 'Mercury transaction not found' });
+
+            const taxCategory = suggestTaxCategory(mtx.mercuryCategoryName);
+            const amount = Math.abs(mtx.amount);
+            const transactionId = `mercury_${mercuryTransactionId}`;
+            const postedAt = mtx.postedAt || new Date();
+
+            try {
+                await Transaction.create({
+                    id: transactionId,
+                    title: mtx.description || mtx.counterpartyNickname || 'Mercury transaction',
+                    amount,
+                    amountUSD: amount,
+                    currency: 'USD',
+                    exchangeRateToUSD: 1,
+                    date: new Date(postedAt).toISOString().split('T')[0],
+                    dateObj: postedAt,
+                    type: 'expense',
+                    category: 'other',
+                    taxCategory,
+                    description: mtx.description || '',
+                });
+                res.status(201).json({ id: transactionId, taxCategory });
+            } catch (err) {
+                if (err.code === 11000) {
+                    return res.status(200).json({ id: transactionId, taxCategory, alreadyApproved: true });
+                }
+                throw err;
+            }
+        } catch (err) {
+            res.status(500).json({ error: err.message });
         }
     });
 
