@@ -170,23 +170,35 @@ export function ReconciliationTab() {
     setError('');
     try {
       // The server caps /approve-many at 100 items per call — chunk here and
-      // send sequential requests, accumulating results across all batches
-      // before touching any state once at the end, so a >100-row sync
-      // doesn't fail outright and the UI doesn't flicker per-batch.
+      // send sequential requests, accumulating results across all batches.
+      // If a LATER batch's request itself fails (network blip, expired
+      // session, etc.), earlier batches have already posted real
+      // Transaction/JournalEntry records — we must not discard those results
+      // by bailing out early. Instead, record that the batch-level request
+      // failed and stop sending further batches, but always fall through to
+      // apply whatever allResults were actually accumulated so the UI
+      // reflects reality (approved rows move out of "Faltantes") rather than
+      // implying nothing happened.
       const allResults: any[] = [];
+      let batchRequestFailed = false;
       for (let i = 0; i < eligible.length; i += 100) {
         const batch = eligible.slice(i, i + 100);
-        const res = await apiFetch('/api/mercury-import/approve-many', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            items: batch.map(m => ({ mercuryTransactionId: m.bankRow.mercuryTransactionId, taxCategory: categoryFor(m.bankRow) })),
-          }),
-        });
+        let res: Response;
+        try {
+          res = await apiFetch('/api/mercury-import/approve-many', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              items: batch.map(m => ({ mercuryTransactionId: m.bankRow.mercuryTransactionId, taxCategory: categoryFor(m.bankRow) })),
+            }),
+          });
+        } catch {
+          batchRequestFailed = true;
+          break;
+        }
         if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
-          setError(body.error || 'No se pudo aprobar en lote.');
-          return;
+          batchRequestFailed = true;
+          break;
         }
         const body = await res.json();
         allResults.push(...body.results);
@@ -194,10 +206,6 @@ export function ReconciliationTab() {
 
       const approvedIds = new Set(allResults.filter((r: any) => r.status === 'approved').map((r: any) => r.mercuryTransactionId));
       const failedResults = allResults.filter((r: any) => r.status === 'error');
-
-      if (failedResults.length > 0) {
-        setError(`${failedResults.length} de ${eligible.length} no se pudieron aprobar: ${failedResults.map((r: any) => r.error).join('; ')}`);
-      }
 
       const newlyApproved: ApprovedRow[] = eligible
         .filter(m => approvedIds.has(m.bankRow.mercuryTransactionId))
@@ -208,6 +216,14 @@ export function ReconciliationTab() {
 
       setResult(r => r ? { ...r, missing: r.missing.filter(m => !approvedIds.has(m.bankRow.mercuryTransactionId)) } : r);
       setApprovedRows(rows => [...newlyApproved, ...rows]);
+
+      if (batchRequestFailed) {
+        setError(
+          `${newlyApproved.length} aprobados, pero una parte del lote falló al conectar con el servidor — revisa e intentá de nuevo con las filas restantes.`
+        );
+      } else if (failedResults.length > 0) {
+        setError(`${failedResults.length} de ${eligible.length} no se pudieron aprobar: ${failedResults.map((r: any) => r.error).join('; ')}`);
+      }
     } finally {
       setBulkApproving(false);
     }

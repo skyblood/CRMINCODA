@@ -59,4 +59,26 @@ describe('runNightlyMercurySyncJob', () => {
     assert.equal(count, 1);
     assert.ok(await MercuryTransaction.findOne({ mercuryTransactionId: 'tx_ok_1' }).lean());
   });
+
+  it('passes a bounded {start, end} date window to mercuryListTransactions instead of requesting full lifetime history', async () => {
+    process.env.MERCURY_API_TOKEN = 'test-token';
+    const capturedWindows: { start?: string; end?: string }[] = [];
+    try {
+      await runNightlyMercurySyncJob({
+        mercuryListAccounts: async () => [{ id: 'acc_a', name: 'A', type: 'checking' }],
+        mercuryListTransactions: async (accountId: string, window: { start?: string; end?: string }) => {
+          capturedWindows.push(window);
+          return [];
+        },
+      });
+    } finally {
+      delete process.env.MERCURY_API_TOKEN;
+    }
+
+    assert.equal(capturedWindows.length, 1);
+    const [window] = capturedWindows;
+    assert.ok(window, 'expected mercuryListTransactions to receive a second argument');
+    assert.match(window.start ?? '', /^\d{4}-\d{2}-\d{2}$/, `start should look like YYYY-MM-DD, got ${window.start}`);
+    assert.match(window.end ?? '', /^\d{4}-\d{2}-\d{2}$/, `end should look like YYYY-MM-DD, got ${window.end}`);
+  });
 });
