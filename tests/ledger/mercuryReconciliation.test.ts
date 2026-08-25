@@ -578,6 +578,35 @@ describe('POST /api/mercury-import/approve', () => {
     const tx = await Transaction.findOne({ id: 'mercury_tx_fail_2' }).lean();
     assert.equal(tx?.postingStatus, 'posted');
   });
+
+  it('uses an explicit taxCategory override instead of the suggested one, when provided and valid', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_override_1',
+      amount: -60, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Ambiguous charge', mercuryCategoryName: 'Bank Fees', // would normally suggest Other Expenses
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_override_1', taxCategory: 'Travel' });
+
+    assert.equal(res.status, 201);
+    assert.equal(res.body.taxCategory, 'Travel');
+    const tx = await Transaction.findOne({ id: 'mercury_tx_override_1' }).lean();
+    assert.equal(tx?.taxCategory, 'Travel');
+  });
+
+  it('rejects an invalid taxCategory override with 400, without creating anything', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_override_2',
+      amount: -10, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Charge', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_override_2', taxCategory: 'Not A Real Category' });
+
+    assert.equal(res.status, 400);
+    const tx = await Transaction.findOne({ id: 'mercury_tx_override_2' }).lean();
+    assert.equal(tx, null);
+  });
 });
 
 describe('POST /api/mercury-import/unapprove', () => {

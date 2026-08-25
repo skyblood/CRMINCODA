@@ -19,6 +19,14 @@ type MercuryAccount = { id: string; name: string; type: string };
 // so the user has a short window to click "Deshacer" without re-syncing.
 type ApprovedRow = { mercuryTransactionId: string; bankRow: Record<string, string>; taxCategory: string };
 
+// Mirrors CompanyExpensesTab.tsx's own hardcoded list — the Schedule C
+// categories a user can pick from when approving a Mercury row.
+const TAX_CATEGORIES = [
+  'Advertising', 'Contract Labor', 'Office Expense', 'Insurance',
+  'Legal & Professional Services', 'Rent', 'Supplies', 'Taxes & Licenses',
+  'Travel', 'Meals', 'Utilities', 'Other Expenses',
+];
+
 function defaultDateRange() {
   const end = new Date();
   const start = new Date();
@@ -37,6 +45,13 @@ export function ReconciliationTab() {
   const [syncing, setSyncing] = useState(false);
   const [accountsError, setAccountsError] = useState('');
   const [approvedRows, setApprovedRows] = useState<ApprovedRow[]>([]);
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, string>>({});
+
+  const categoryFor = (bankRow: Record<string, string>) => {
+    const id = bankRow.mercuryTransactionId;
+    if (id && categoryOverrides[id]) return categoryOverrides[id];
+    return bankRow.mercurySuggestedTaxCategory || 'Other Expenses';
+  };
 
   useEffect(() => {
     apiFetch('/api/mercury-import/accounts')
@@ -129,14 +144,14 @@ export function ReconciliationTab() {
     const res = await apiFetch('/api/mercury-import/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mercuryTransactionId }),
+      body: JSON.stringify({ mercuryTransactionId, taxCategory: categoryFor(bankRow) }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
       setError(body.error || 'No se pudo aprobar el gasto.');
       return;
     }
-    const body = await res.json().catch(() => ({ taxCategory: bankRow.mercurySuggestedTaxCategory || '' }));
+    const body = await res.json().catch(() => ({ taxCategory: categoryFor(bankRow) }));
     setResult(r => r ? {
       ...r,
       missing: r.missing.filter(m => m.bankRow.mercuryTransactionId !== mercuryTransactionId),
@@ -256,14 +271,17 @@ export function ReconciliationTab() {
               <div key={i} className="flex items-center justify-between text-sm border-b border-gray-100 py-2 gap-3">
                 <div className="min-w-0">
                   <div>{m.bankRow.Date} — {m.bankRow.Description} — ${m.bankRow.Amount}</div>
-                  {m.bankRow.mercurySuggestedTaxCategory && (
-                    <div className="text-[11px] text-gray-400">
-                      Categoría sugerida: {m.bankRow.mercurySuggestedTaxCategory}
+                  {m.bankRow.mercuryTransactionId && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <select
+                        className="text-[11px] border border-gray-200 rounded px-1 py-0.5 text-gray-600"
+                        value={categoryFor(m.bankRow)}
+                        onChange={e => setCategoryOverrides(prev => ({ ...prev, [m.bankRow.mercuryTransactionId!]: e.target.value }))}
+                      >
+                        {TAX_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
                       {m.bankRow.dashboardLink && (
-                        <>
-                          {' · '}
-                          <a href={m.bankRow.dashboardLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">Ver en Mercury ↗</a>
-                        </>
+                        <a href={m.bankRow.dashboardLink} target="_blank" rel="noreferrer" className="text-[11px] text-purple-600 hover:underline">Ver en Mercury ↗</a>
                       )}
                     </div>
                   )}

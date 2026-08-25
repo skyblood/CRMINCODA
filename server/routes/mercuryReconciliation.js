@@ -228,7 +228,12 @@ export function createMercuryReconciliationRouter({
                 return res.status(400).json({ error: 'Solo los movimientos de salida se pueden aprobar como gasto.' });
             }
 
-            const taxCategory = suggestTaxCategory(mtx.mercuryCategoryName);
+            let taxCategory = suggestTaxCategory(mtx.mercuryCategoryName);
+            if (typeof req.body.taxCategory === 'string' && req.body.taxCategory) {
+                const validAccount = await LedgerAccount.findOne({ type: 'expense', taxCategory: req.body.taxCategory }).lean();
+                if (!validAccount) return res.status(400).json({ error: 'Invalid taxCategory' });
+                taxCategory = req.body.taxCategory;
+            }
             const amount = Math.abs(mtx.amount);
             const transactionId = `mercury_${mercuryTransactionId}`;
             const postedAt = mtx.postedAt || mtx.mercuryCreatedAt || new Date();
