@@ -18,6 +18,10 @@ const MercuryTransactionSchema = new mongoose.Schema({
   mercuryCategoryName: String,
   kind: String,
   counterpartyNickname: String,
+  // Free-text note the Mercury user attaches per-transaction from Mercury's
+  // own dashboard (e.g. "Cena cliente Cartagena") — the most human-authored,
+  // meaningful context available on a transaction, when present.
+  note: String,
 }, { timestamps: true });
 
 MercuryTransactionSchema.index(

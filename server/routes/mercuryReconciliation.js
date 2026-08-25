@@ -26,7 +26,13 @@ const SAFE_ID_RE = /^[a-zA-Z0-9_\-]{1,128}$/;
 // dashboard shows the nickname/name in its "To/From" column, which is far
 // more useful than the generic bank text, so prefer it.
 function describeTransaction(t) {
-    return t.counterpartyNickname || t.counterpartyName || t.bankDescription || '';
+    const who = t.counterpartyNickname || t.counterpartyName || t.bankDescription || '';
+    // Mercury's own "Notes" field is free text the account holder writes per
+    // transaction (e.g. "Cena cliente Cartagena") — the most meaningful
+    // context available when present, so surface it alongside who the
+    // transaction was with rather than letting it get lost.
+    if (t.note) return who ? `${who} — ${t.note}` : t.note;
+    return who;
 }
 
 // A pending transaction has no postedAt yet, so callers fall back to
@@ -198,6 +204,7 @@ export function createMercuryReconciliationRouter({
                     mercuryCategoryName: t.categoryData?.name ?? null,
                     kind: t.kind,
                     counterpartyNickname: t.counterpartyNickname,
+                    note: t.note ?? null,
                 } },
                 { upsert: true }
             )));

@@ -361,6 +361,50 @@ describe('POST /api/mercury-import/sync — category suggestion on missing rows'
     assert.equal(res.body.missing[0].bankRow.Date, '2026-07-27');
   });
 
+  it('combines counterparty and Mercury note as "Counterparty — Note" when both are present', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_note_1', amount: -106.34, status: 'sent', postedAt: '2026-08-20', counterpartyNickname: 'Bold Sa*grupo Pa', note: 'Cena cliente Cartagena' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Description, 'Bold Sa*grupo Pa — Cena cliente Cartagena');
+    const stored = await MercuryTransaction.findOne({ mercuryTransactionId: 'tx_note_1' }).lean();
+    assert.equal(stored?.note, 'Cena cliente Cartagena');
+  });
+
+  it('uses just the note when there is no counterparty name at all', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_note_2', amount: -5, status: 'sent', postedAt: '2026-08-20', note: 'Solo la nota' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Description, 'Solo la nota');
+  });
+
+  it('omits the note when Mercury sends null (the common case)', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_note_3', amount: -20, status: 'sent', postedAt: '2026-08-20', counterpartyNickname: 'Vendor X', note: null },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Description, 'Vendor X');
+  });
+
   it('does not attach mercuryTransactionId to a missing row from the CSV path', async () => {
     const csv = 'Date,Description,Amount\n2026-07-01,Unrecorded Fee,-25.00\n';
     const res = await request(app).post('/api/mercury-import').send({ csv });
