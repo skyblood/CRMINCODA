@@ -40,3 +40,12 @@ export function requireAdmin(req, res, next) {
     }
     next();
 }
+
+export function requireFinance(req, res, next) {
+    const user = req.session?.user;
+    if (!user) return res.status(401).json({ error: 'Not authenticated.' });
+    if (user.permissions?.finance !== true && user.permissions?.admin !== true) {
+        return res.status(403).json({ error: 'Finance access required.' });
+    }
+    next();
+}

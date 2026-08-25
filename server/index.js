@@ -24,7 +24,7 @@ import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import { sanitizeBody, sanitizeQuery, sanitizeParams } from './middleware/sanitize.js';
-import { requireAuth } from './middleware/requireAuth.js';
+import { requireAuth, requireFinance } from './middleware/requireAuth.js';
 import cron from 'node-cron';
 // Lazy-loaded if system MongoDB fails (see connectDB function)
 import { fileURLToPath } from 'url';
@@ -301,13 +301,13 @@ app.use('/api/seed', seedRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/balanceSheetAccounts', balanceSheetAccountsRouter);
 app.use('/api/balanceSheetNotes', balanceSheetNotesRouter);
-app.use('/api/ledger-accounts', ledgerAccountsRouter);
-app.use('/api/journal-entries', journalEntriesRouter);
-app.use('/api/ledger-reports', ledgerReportsRouter);
+app.use('/api/ledger-accounts', requireFinance, ledgerAccountsRouter);
+app.use('/api/journal-entries', requireFinance, journalEntriesRouter);
+app.use('/api/ledger-reports', requireFinance, ledgerReportsRouter);
 // Not added to readRoutes/dataRoutes tiers — falls back to the Tier 1 global
 // 300/15min limit, acceptable for an infrequent manual import action; note
 // this explicitly rather than leaving it silent.
-app.use('/api/mercury-import', mercuryReconciliationRouter);
+app.use('/api/mercury-import', requireFinance, mercuryReconciliationRouter);
 app.use('/api/apikeys', apiKeysRouter);
 app.use('/api/v1', externalRouter);
 app.use('/api/search', searchRouter);
