@@ -260,6 +260,20 @@ describe('POST /api/mercury-import/sync', () => {
     assert.equal(res.status, 502);
     assert.match(res.body.error, /Mercury API/);
   });
+
+  // Regression test: a failure AFTER the Mercury fetch succeeds (our own DB
+  // write, or reconcileRows' own logic) is an internal error, not an
+  // upstream one — it must surface as 500, not the 502 reserved for a
+  // verified Mercury API failure, or triage gets pointed at the wrong system.
+  it('returns 500 (not 502) when the failure happens after a successful Mercury fetch', async () => {
+    await LedgerAccount.deleteOne({ code: '1000' }); // Cash account — reconcileRows requires it
+    const testApp = buildApp(async () => [
+      { id: 'tx_1', amount: -25, status: 'sent', postedAt: '2026-07-01', description: 'Fee', counterpartyName: 'Bank' },
+    ]);
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+    assert.equal(res.status, 500);
+    assert.match(res.body.error, /Cash account not seeded/);
+  });
 });
 
 describe('POST /api/mercury-import/sync — category suggestion on missing rows', () => {
@@ -483,6 +497,32 @@ describe('POST /api/mercury-import/approve', () => {
 
     const entryCount = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'mercury_tx_approve_2' });
     assert.equal(entryCount, 1);
+  });
+
+  // Regression test: the "already approved" response must echo the
+  // taxCategory that was actually persisted on first approval, not whatever
+  // override the second (no-op) request happened to send — the real ledger
+  // entry still reflects the first approval's category.
+  it('an already-approved response reports the persisted taxCategory, not a later override', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_approve_stale_cat',
+      amount: -10, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Flight', mercuryCategoryName: 'Travel & Transportation',
+    });
+
+    const first = await request(app).post('/api/mercury-import/approve')
+      .send({ mercuryTransactionId: 'tx_approve_stale_cat', taxCategory: 'Travel' });
+    assert.equal(first.status, 201);
+    assert.equal(first.body.taxCategory, 'Travel');
+
+    const second = await request(app).post('/api/mercury-import/approve')
+      .send({ mercuryTransactionId: 'tx_approve_stale_cat', taxCategory: 'Utilities' });
+    assert.equal(second.status, 200);
+    assert.equal(second.body.alreadyApproved, true);
+    assert.equal(second.body.taxCategory, 'Travel', 'must report what was actually persisted, not the second request\'s override');
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_approve_stale_cat' }).lean();
+    assert.equal(tx?.taxCategory, 'Travel');
   });
 
   // Finding 1: a positive-amount (incoming) Mercury transaction must never be

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, CheckCircle, AlertTriangle, HelpCircle, Sparkles, RefreshCw, Undo2 } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
+import { TAX_CATEGORIES } from './CompanyExpensesTab';
 
 type ImportResult = {
   matched: { bankRow: Record<string, string>; journalEntryId: string; lineIndex: number }[];
@@ -18,14 +19,6 @@ type MercuryAccount = { id: string; name: string; type: string };
 // on the next sync since its JournalEntry now matches). Kept here purely
 // so the user has a short window to click "Deshacer" without re-syncing.
 type ApprovedRow = { mercuryTransactionId: string; bankRow: Record<string, string>; taxCategory: string };
-
-// Mirrors CompanyExpensesTab.tsx's own hardcoded list — the Schedule C
-// categories a user can pick from when approving a Mercury row.
-const TAX_CATEGORIES = [
-  'Advertising', 'Contract Labor', 'Office Expense', 'Insurance',
-  'Legal & Professional Services', 'Rent', 'Supplies', 'Taxes & Licenses',
-  'Travel', 'Meals', 'Utilities', 'Other Expenses',
-];
 
 function defaultDateRange() {
   const end = new Date();
@@ -46,6 +39,7 @@ export function ReconciliationTab() {
   const [accountsError, setAccountsError] = useState('');
   const [approvedRows, setApprovedRows] = useState<ApprovedRow[]>([]);
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, string>>({});
+  const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
 
   const categoryFor = (bankRow: Record<string, string>) => {
     const id = bankRow.mercuryTransactionId;
@@ -140,23 +134,37 @@ export function ReconciliationTab() {
   };
 
   const approveMissing = async (mercuryTransactionId: string, bankRow: Record<string, string>) => {
+    // Guards against a double-click firing two concurrent /approve requests
+    // for the same row — the button below is disabled while this id is in
+    // flight, but the check here is the source of truth in case both clicks
+    // land before the first re-render.
+    if (approvingIds.has(mercuryTransactionId)) return;
+    setApprovingIds(prev => new Set(prev).add(mercuryTransactionId));
     setError('');
-    const res = await apiFetch('/api/mercury-import/approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mercuryTransactionId, taxCategory: categoryFor(bankRow) }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
-      setError(body.error || 'No se pudo aprobar el gasto.');
-      return;
+    try {
+      const res = await apiFetch('/api/mercury-import/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mercuryTransactionId, taxCategory: categoryFor(bankRow) }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Error desconocido' }));
+        setError(body.error || 'No se pudo aprobar el gasto.');
+        return;
+      }
+      const body = await res.json().catch(() => ({ taxCategory: categoryFor(bankRow) }));
+      setResult(r => r ? {
+        ...r,
+        missing: r.missing.filter(m => m.bankRow.mercuryTransactionId !== mercuryTransactionId),
+      } : r);
+      setApprovedRows(rows => [{ mercuryTransactionId, bankRow, taxCategory: body.taxCategory }, ...rows]);
+    } finally {
+      setApprovingIds(prev => {
+        const next = new Set(prev);
+        next.delete(mercuryTransactionId);
+        return next;
+      });
     }
-    const body = await res.json().catch(() => ({ taxCategory: categoryFor(bankRow) }));
-    setResult(r => r ? {
-      ...r,
-      missing: r.missing.filter(m => m.bankRow.mercuryTransactionId !== mercuryTransactionId),
-    } : r);
-    setApprovedRows(rows => [{ mercuryTransactionId, bankRow, taxCategory: body.taxCategory }, ...rows]);
   };
 
   const [bulkApproving, setBulkApproving] = useState(false);
@@ -241,7 +249,14 @@ export function ReconciliationTab() {
       setError(body.error || 'No se pudo deshacer la aprobación.');
       return;
     }
+    const undoneRow = approvedRows.find(r => r.mercuryTransactionId === mercuryTransactionId);
     setApprovedRows(rows => rows.filter(r => r.mercuryTransactionId !== mercuryTransactionId));
+    // The server-side JournalEntry/Transaction are gone, so put the bank row
+    // back into `missing` — otherwise it vanishes from the view entirely
+    // until the user re-runs a full Mercury sync.
+    if (undoneRow) {
+      setResult(r => r ? { ...r, missing: [{ bankRow: undoneRow.bankRow }, ...r.missing] } : r);
+    }
   };
 
   return (
@@ -368,9 +383,10 @@ export function ReconciliationTab() {
                 {m.bankRow.mercuryTransactionId && Number(m.bankRow.Amount) < 0 && (
                   <button
                     onClick={() => approveMissing(m.bankRow.mercuryTransactionId!, m.bankRow)}
-                    className="text-purple-700 text-xs whitespace-nowrap flex-shrink-0"
+                    disabled={approvingIds.has(m.bankRow.mercuryTransactionId)}
+                    className="text-purple-700 text-xs whitespace-nowrap flex-shrink-0 disabled:opacity-50"
                   >
-                    Aprobar
+                    {approvingIds.has(m.bankRow.mercuryTransactionId) ? 'Aprobando...' : 'Aprobar'}
                   </button>
                 )}
               </div>

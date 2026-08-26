@@ -5,7 +5,7 @@ import { parseCsv } from '../utils/csvParser.js';
 import { CASH_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
 import { computeMatchScore } from '../utils/reconciliationScore.js';
 import MercuryTransaction from '../models/MercuryTransaction.js';
-import { listAccounts, listAccountTransactions, mapMercuryTransactionToUpsert } from '../services/mercuryApiClient.js';
+import { listAccounts, listAccountTransactions, upsertMercuryTransactions } from '../services/mercuryApiClient.js';
 import Transaction from '../models/Transaction.js';
 import { suggestTaxCategory } from '../seed/mercuryCategoryMap.js';
 import { postExpense, isPeriodClosed } from '../services/ledgerPostingService.js';
@@ -169,12 +169,18 @@ async function approveOne(mtx, taxCategoryOverride) {
         return { status: 'approved', id: transactionId, taxCategory };
     } catch (err) {
         if (err.code === 11000) {
+            // Fetch the persisted Transaction up front so both "already
+            // approved" returns below report the taxCategory that's actually
+            // on record — not `taxCategory`, which may hold *this* request's
+            // (possibly different) override and was never saved anywhere.
+            const existingTx = await Transaction.findOne({ id: transactionId }).lean();
+            const persistedTaxCategory = existingTx?.taxCategory || taxCategory;
+
             const existingEntry = await JournalEntry.findOne({ source: 'expense', sourceId: transactionId, status: { $ne: 'void' } }).lean();
             if (existingEntry) {
-                return { status: 'approved', id: transactionId, taxCategory, alreadyApproved: true };
+                return { status: 'approved', id: transactionId, taxCategory: persistedTaxCategory, alreadyApproved: true };
             }
 
-            const existingTx = await Transaction.findOne({ id: transactionId }).lean();
             if (existingTx) {
                 try {
                     await postExpense(existingTx);
@@ -188,7 +194,7 @@ async function approveOne(mtx, taxCategoryOverride) {
             if (existingTx) {
                 await Transaction.updateOne({ id: transactionId }, { $set: { postingStatus: 'posted' } }).catch(() => {});
             }
-            return { status: 'approved', id: transactionId, taxCategory, alreadyApproved: true };
+            return { status: 'approved', id: transactionId, taxCategory: persistedTaxCategory, alreadyApproved: true };
         }
         // Any other error (e.g. a Mongo write failure unrelated to a
         // duplicate key) — the pre-refactor handler let this propagate to
@@ -261,18 +267,25 @@ export function createMercuryReconciliationRouter({
     });
 
     scopedRouter.post('/sync', async (req, res) => {
-        try {
-            const { accountId, start, end } = req.body;
-            if (typeof accountId !== 'string' || !SAFE_ID_RE.test(accountId)) {
-                return res.status(400).json({ error: 'Invalid accountId' });
-            }
-            const transactions = await mercuryListTransactions(accountId, { start, end });
+        const { accountId, start, end } = req.body;
+        if (typeof accountId !== 'string' || !SAFE_ID_RE.test(accountId)) {
+            return res.status(400).json({ error: 'Invalid accountId' });
+        }
 
-            await Promise.all(transactions.map(t => MercuryTransaction.updateOne(
-                { mercuryAccountId: accountId, mercuryTransactionId: t.id },
-                { $set: mapMercuryTransactionToUpsert(accountId, t) },
-                { upsert: true }
-            )));
+        // Only a genuine Mercury API failure gets 502 (a signal that the
+        // upstream, not this server, is at fault). Anything after this point
+        // (our own DB writes, reconcileRows' own logic) is an internal error
+        // and must surface as 500 — conflating the two into one 502 misleads
+        // whoever triages the error toward the wrong system.
+        let transactions;
+        try {
+            transactions = await mercuryListTransactions(accountId, { start, end });
+        } catch (err) {
+            return res.status(502).json({ error: err.message });
+        }
+
+        try {
+            await upsertMercuryTransactions(accountId, transactions, MercuryTransaction);
 
             const rows = transactions.map(t => ({
                 Date: toDateOnly(t.postedAt ?? t.createdAt),
@@ -285,7 +298,7 @@ export function createMercuryReconciliationRouter({
             const result = await reconcileRows(rows);
             res.json({ ...result, parseErrors: [] });
         } catch (err) {
-            res.status(502).json({ error: err.message });
+            res.status(500).json({ error: err.message });
         }
     });
 

@@ -119,3 +119,26 @@ export function mapMercuryTransactionToUpsert(accountId, t) {
     dashboardLink: t.dashboardLink ?? null,
   };
 }
+
+// Batch size for the concurrent MercuryTransaction upserts below — bounds how
+// many simultaneous Mongoose writes a single sync can issue. An account near
+// listAccountTransactions' MAX_PAGES cap can return up to 2000 transactions;
+// firing all of them as one Promise.all risks exhausting the MongoDB driver's
+// connection pool, especially with several busy accounts syncing at once.
+const UPSERT_BATCH_SIZE = 25;
+
+// Single source of truth for the upsert *orchestration* (not just the shape
+// from mapMercuryTransactionToUpsert above) — both POST /sync and the nightly
+// sync scheduler call this instead of each running their own
+// Promise.all(transactions.map(...updateOne...)), so the two call sites can't
+// drift on batching/error behavior either.
+export async function upsertMercuryTransactions(accountId, transactions, MercuryTransactionModel) {
+  for (let i = 0; i < transactions.length; i += UPSERT_BATCH_SIZE) {
+    const batch = transactions.slice(i, i + UPSERT_BATCH_SIZE);
+    await Promise.all(batch.map(t => MercuryTransactionModel.updateOne(
+      { mercuryAccountId: accountId, mercuryTransactionId: t.id },
+      { $set: mapMercuryTransactionToUpsert(accountId, t) },
+      { upsert: true }
+    )));
+  }
+}

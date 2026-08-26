@@ -1,6 +1,6 @@
 // server/jobs/mercurySyncScheduler.js
 import cron from 'node-cron';
-import { listAccounts, listAccountTransactions, mapMercuryTransactionToUpsert } from '../services/mercuryApiClient.js';
+import { listAccounts, listAccountTransactions, upsertMercuryTransactions } from '../services/mercuryApiClient.js';
 import MercuryTransaction from '../models/MercuryTransaction.js';
 
 // listAccountTransactions has a MAX_PAGES safety cap (2000 tx) that THROWS
@@ -42,11 +42,7 @@ export async function runNightlyMercurySyncJob({
     for (const account of accounts) {
         try {
             const transactions = await mercuryListTransactions(account.id, defaultSyncWindow());
-            await Promise.all(transactions.map(t => MercuryTransaction.updateOne(
-                { mercuryAccountId: account.id, mercuryTransactionId: t.id },
-                { $set: mapMercuryTransactionToUpsert(account.id, t) },
-                { upsert: true }
-            )));
+            await upsertMercuryTransactions(account.id, transactions, MercuryTransaction);
             synced += transactions.length;
         } catch (err) {
             console.error(`[MercurySync] Failed to sync account ${account.id}:`, err.message);

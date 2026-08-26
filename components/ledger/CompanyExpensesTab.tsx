@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import type { Transaction, TaxCategory } from '../../types';
 import { apiFetch } from '../../services/apiFetch';
 
-const TAX_CATEGORIES: TaxCategory[] = [
+export const TAX_CATEGORIES: TaxCategory[] = [
   'Advertising', 'Contract Labor', 'Office Expense', 'Insurance',
   'Legal & Professional Services', 'Rent', 'Supplies', 'Taxes & Licenses',
   'Travel', 'Meals', 'Utilities', 'Other Expenses',
