@@ -24,7 +24,7 @@ import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import { sanitizeBody, sanitizeQuery, sanitizeParams } from './middleware/sanitize.js';
-import { requireAuth } from './middleware/requireAuth.js';
+import { requireAuth, requireFinance } from './middleware/requireAuth.js';
 import cron from 'node-cron';
 // Lazy-loaded if system MongoDB fails (see connectDB function)
 import { fileURLToPath } from 'url';
@@ -92,6 +92,7 @@ import reportsRouter from './routes/reports.js';
 import commissionsRouter from './routes/commissions.js';
 import { startInvoiceScheduler, getSchedulerHealth } from './jobs/invoiceScheduler.js';
 import { startLeadEnrichmentScheduler } from './jobs/leadEnrichmentScheduler.js';
+import { startMercurySyncScheduler } from './jobs/mercurySyncScheduler.js';
 import proposalTemplatesRouter from './routes/proposalTemplates.js';
 import aiReportsRouter from './routes/aiReports.js';
 import backupRouter from './routes/backup.js';
@@ -142,35 +143,65 @@ app.use(helmet({
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 // ── Rate limit helpers ────────────────────────────────────────────────────────
-const makeLimit = (windowMs, max, message) => rateLimit({
+// extraSkip lets a specific tier bypass a broader tier it's nested under (e.g.
+// Tier 1's global bucket exempting /api/health, which has its own tier below) —
+// without it, both limiters would run and the narrower one couldn't matter.
+const makeLimit = (windowMs, max, message, extraSkip) => rateLimit({
     windowMs,
     max,
     standardHeaders: true,   // RateLimit-* headers (RFC 6585)
     legacyHeaders: false,
     message: { error: message },
-    skip: () => !IS_PROD,    // disabled in development
+    skip: (req) => !IS_PROD || (extraSkip ? extraSkip(req) : false),
 });
 
-// ── Tier 1 — Global fallback (all /api/* not matched below) ──────────────────
-// 300 req / 15 min per IP — covers normal CRM usage across all modules
-app.use('/api/', makeLimit(
-    15 * 60 * 1000, 300,
-    'Too many requests. Please slow down.'
+// ── Tier 0 — Health check — very generous, exempted from Tier 1's shared bucket ─
+// The frontend's own connectivity poller (services/apiService.ts) hits this
+// every 15s indefinitely for as long as a tab is open, and external uptime
+// monitors may also probe it — sharing Tier 1's budget let this background
+// traffic alone exhaust the quota and 429 every other endpoint on the same IP.
+app.use('/api/health', makeLimit(
+    15 * 60 * 1000, 2000,
+    'Too many health check requests.'
 ));
 
 // ── Tier 2 — Read routes (GET only) — generous ───────────────────────────────
-// Frontend polls subscriptions; allow up to 600 GETs / 15 min
+// Frontend polls subscriptions (services/apiService.ts starts a 30s poll per
+// subscribed collection, on top of WebSocket updates); allow up to 600 GETs /
+// 15 min per route. Declared before Tier 1 so its skip logic (below) can
+// exempt every one of these paths from Tier 1's much tighter shared budget.
 const readRoutes = [
     '/api/leads', '/api/projects', '/api/users', '/api/contacts',
     '/api/transactions', '/api/skus', '/api/templates', '/api/goals',
     '/api/balanceSheetAccounts', '/api/balanceSheetNotes',
     '/api/accounts', '/api/activities', '/api/automations',
     '/api/ledger-accounts', '/api/journal-entries', '/api/ledger-reports',
+    '/api/pipelines', '/api/notifications', '/api/mercury-import',
 ];
 readRoutes.forEach(route => {
     app.get(route, makeLimit(15 * 60 * 1000, 600, 'Too many read requests.'));
     app.get(`${route}/:id`, makeLimit(15 * 60 * 1000, 600, 'Too many read requests.'));
 });
+
+// ── Tier 1 — Global fallback (only /api/* paths not covered by a tier of
+// their own) ───────────────────────────────────────────────────────────────
+// 300 req / 15 min per IP. This is meant to be a true fallback, but since
+// app.use('/api/', ...) registers before every per-route tier below and
+// Express runs every matching middleware in registration order, Tier 1 used
+// to run FIRST for every request regardless of a route's own, more generous
+// tier — its far tighter budget was the actual bottleneck everywhere. That's
+// what let 13 always-on background subscription polls (services/
+// apiService.ts, one 30s interval per subscribed collection) alone exhaust
+// the shared 300-request budget well inside 15 minutes on a single open tab,
+// 429-ing unrelated requests (including Mercury reconciliation) as collateral
+// damage. Exempt every route with its own dedicated tier (Tier 0's /health,
+// Tier 2's readRoutes) so Tier 1 only governs genuinely uncategorized paths.
+const TIER_EXEMPT_PREFIXES = ['/health', ...readRoutes.map(r => r.replace(/^\/api/, ''))];
+app.use('/api/', makeLimit(
+    15 * 60 * 1000, 300,
+    'Too many requests. Please slow down.',
+    (req) => TIER_EXEMPT_PREFIXES.some(prefix => req.path === prefix || req.path.startsWith(`${prefix}/`))
+));
 
 // ── Tier 3 — Write routes (POST/PUT/DELETE) — moderate ───────────────────────
 // 60 mutations / 15 min per IP across all data routes
@@ -187,6 +218,22 @@ dataRoutes.forEach(route => {
     app.put(`${route}/:id`, writeLimit);
     app.delete(`${route}/:id`, writeLimit);
 });
+
+// mercury-import's mutating actions live at named sub-paths (/confirm-match,
+// /sync, /approve, /approve-many, /unapprove), not the generic
+// collection+':id' shape dataRoutes assumes above — and Tier 1 exempts the
+// whole /api/mercury-import prefix (Tier 2 only covers its GETs), so these
+// need explicit write-tier coverage or they'd be completely unrate-limited.
+// A dedicated (not the shared writeLimit) budget: bulk approve can post up
+// to 100 mutations in a single user action, well past the shared tier's
+// 60/15min.
+const mercuryWriteLimit = makeLimit(15 * 60 * 1000, 300, 'Too many Mercury actions. Please wait before approving more.');
+app.post('/api/mercury-import', mercuryWriteLimit);
+app.post('/api/mercury-import/confirm-match', mercuryWriteLimit);
+app.post('/api/mercury-import/sync', mercuryWriteLimit);
+app.post('/api/mercury-import/approve', mercuryWriteLimit);
+app.post('/api/mercury-import/approve-many', mercuryWriteLimit);
+app.post('/api/mercury-import/unapprove', mercuryWriteLimit);
 
 // ── Tier 4 — Auth routes — strict ────────────────────────────────────────────
 // Login:        10 attempts / 15 min  (brute-force protection)
@@ -261,13 +308,13 @@ app.use('/api/seed', seedRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/balanceSheetAccounts', balanceSheetAccountsRouter);
 app.use('/api/balanceSheetNotes', balanceSheetNotesRouter);
-app.use('/api/ledger-accounts', ledgerAccountsRouter);
-app.use('/api/journal-entries', journalEntriesRouter);
-app.use('/api/ledger-reports', ledgerReportsRouter);
+app.use('/api/ledger-accounts', requireFinance, ledgerAccountsRouter);
+app.use('/api/journal-entries', requireFinance, journalEntriesRouter);
+app.use('/api/ledger-reports', requireFinance, ledgerReportsRouter);
 // Not added to readRoutes/dataRoutes tiers — falls back to the Tier 1 global
 // 300/15min limit, acceptable for an infrequent manual import action; note
 // this explicitly rather than leaving it silent.
-app.use('/api/mercury-import', mercuryReconciliationRouter);
+app.use('/api/mercury-import', requireFinance, mercuryReconciliationRouter);
 app.use('/api/apikeys', apiKeysRouter);
 app.use('/api/v1', externalRouter);
 app.use('/api/search', searchRouter);
@@ -446,6 +493,7 @@ const start = async () => {
     schedulePeriodicNotifications();
     startInvoiceScheduler();
     startLeadEnrichmentScheduler();
+    startMercurySyncScheduler();
 };
 
 // Start server

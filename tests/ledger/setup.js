@@ -10,6 +10,7 @@ import LedgerPeriodClose from '../../server/models/LedgerPeriodClose.js';
 import Transaction from '../../server/models/Transaction.js';
 import Payment from '../../server/models/Payment.js';
 import Commission from '../../server/models/Commission.js';
+import MercuryTransaction from '../../server/models/MercuryTransaction.js';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../../server/seed/chartOfAccounts.js';
 
 let mongoServer;
@@ -37,6 +38,7 @@ export async function clearLedgerCollections() {
     Transaction.deleteMany({}),
     Payment.deleteMany({}),
     Commission.deleteMany({}),
+    MercuryTransaction.deleteMany({}),
   ]);
 }
 

@@ -52,6 +52,23 @@ describe('postExpense', () => {
     assert.equal(count, 1);
   });
 
+  // Regression test: alreadyPosted()'s read-then-write check is not atomic,
+  // so two truly concurrent calls for the same transaction id (e.g. a
+  // double-clicked Mercury "Aprobar" button racing its own post-save-hook
+  // posting attempt) can both pass the check before either has created a
+  // JournalEntry. The real guarantee is JournalEntry's partial unique index
+  // on {source, sourceId} — exactly one Promise.all branch should get a
+  // real entry back, the other null, with only one entry ever persisted.
+  it('posting the same transaction id concurrently creates exactly one JournalEntry', async () => {
+    const tx = { id: 'tx_concurrent', title: 'AWS', amount: 100, amountUSD: 100, currency: 'USD', exchangeRateToUSD: 1, category: 'software', date: '2026-07-01' };
+    const [a, b] = await Promise.all([postExpense(tx), postExpense(tx)]);
+    const results = [a, b];
+    assert.equal(results.filter(r => r !== null).length, 1);
+    assert.equal(results.filter(r => r === null).length, 1);
+    const count = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'tx_concurrent' });
+    assert.equal(count, 1);
+  });
+
   // Regression test for the Task 17 review Fix 6: two seeded accounts share
   // taxCategory: 'Office Expense' (6200 Office Expense, 6300 Software) —
   // Schedule C has no dedicated "software" line, so both legitimately map

@@ -4,20 +4,9 @@ import LedgerAccount from '../models/LedgerAccount.js';
 import LedgerPeriodClose from '../models/LedgerPeriodClose.js';
 import { deepSanitize } from '../middleware/sanitize.js';
 import { emitCollectionChange } from '../socketInstance.js';
+import { isPeriodClosed } from '../services/ledgerPostingService.js';
 
 const router = Router();
-
-async function isPeriodClosed(date) {
-    const d = new Date(date);
-    // Use UTC getters, not local-time getters: journal entry dates are
-    // stored/compared as UTC, but getFullYear()/getMonth() read local-time
-    // components. In any negative-UTC-offset timezone (e.g. America/Bogota,
-    // UTC-5) a date stored as e.g. 2026-01-01T00:00:00.000Z reads back as
-    // December 31, 2025 in local time, which would match/miss the wrong
-    // period close record (see Task 17 review Fix 4).
-    const closed = await LedgerPeriodClose.findOne({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 }).lean();
-    return !!closed;
-}
 
 /**
  * Validates that every `lines[].accountId` in a manual journal entry

@@ -45,7 +45,21 @@ const JournalEntrySchema = new mongoose.Schema({
 }, { timestamps: true, strict: true });
 
 JournalEntrySchema.index({ date: -1 });
-JournalEntrySchema.index({ source: 1, sourceId: 1 });
+// Unique (not just indexed) among posted entries with a real sourceId: closes
+// a check-then-act race in ledgerPostingService's alreadyPosted() guard,
+// where two concurrent postX() calls for the same source+sourceId can both
+// see "not yet posted" and both proceed to create() — see
+// ledgerPostingService.js's createJournalEntryIdempotent(). Void entries are
+// excluded so re-approving after an /unapprove (same sourceId, new entry)
+// isn't blocked by the old voided one; sourceId:'' is excluded so manual/
+// opening_balance entries (which don't use sourceId) never collide.
+// MongoDB partial indexes only support a small operator subset ($eq, $gt,
+// $gte, $lt, $lte, $exists, $type — not $ne), so "sourceId is a real,
+// non-empty value" is expressed as $gt: '' rather than $ne: ''.
+JournalEntrySchema.index(
+    { source: 1, sourceId: 1 },
+    { unique: true, partialFilterExpression: { status: 'posted', sourceId: { $gt: '' } } }
+);
 JournalEntrySchema.index({ 'lines.accountId': 1 });
 
 export default mongoose.model('JournalEntry', JournalEntrySchema);

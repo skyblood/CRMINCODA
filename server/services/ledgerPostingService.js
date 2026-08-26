@@ -1,5 +1,6 @@
 import LedgerAccount from '../models/LedgerAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
+import LedgerPeriodClose from '../models/LedgerPeriodClose.js';
 import User from '../models/User.js';
 import { notifyAdmins } from '../notificationService.js';
 import { CATEGORY_TO_ACCOUNT_CODE, CASH_ACCOUNT_CODE, INCOME_ACCOUNT_CODE } from '../seed/chartOfAccounts.js';
@@ -8,6 +9,39 @@ async function alreadyPosted(source, sourceId) {
     if (!sourceId) return false;
     const existing = await JournalEntry.findOne({ source, sourceId, status: { $ne: 'void' } }).lean();
     return !!existing;
+}
+
+// alreadyPosted() above is a non-atomic check-then-act guard — it cannot by
+// itself prevent two concurrent postX() calls for the same source+sourceId
+// from both seeing "not yet posted" and both reaching JournalEntry.create().
+// The real guarantee is JournalEntry's partial unique index on
+// {source, sourceId} (status: 'posted'): whichever create() loses the race
+// gets a MongoServerError 11000, which this wrapper treats the same as
+// alreadyPosted() returning true — the entry the *other* caller created is
+// the one of record.
+async function createJournalEntryIdempotent(doc) {
+    try {
+        return await JournalEntry.create(doc);
+    } catch (err) {
+        if (err.code === 11000) return null;
+        throw err;
+    }
+}
+
+// Shared with server/routes/journalEntries.js's own void/create-entry checks —
+// moved here so any caller that needs to know whether a date falls in a
+// closed accounting period (e.g. before voiding a Mercury-approved entry)
+// doesn't have to import from another route module.
+export async function isPeriodClosed(date) {
+    const d = new Date(date);
+    // Use UTC getters, not local-time getters: journal entry dates are
+    // stored/compared as UTC, but getFullYear()/getMonth() read local-time
+    // components. In any negative-UTC-offset timezone (e.g. America/Bogota,
+    // UTC-5) a date stored as e.g. 2026-01-01T00:00:00.000Z reads back as
+    // December 31, 2025 in local time, which would match/miss the wrong
+    // period close record (see Task 17 review Fix 4).
+    const closed = await LedgerPeriodClose.findOne({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 }).lean();
+    return !!closed;
 }
 
 function makeLine(accountId, amountNative, amountUSD, isDebit, opts = {}) {
@@ -53,7 +87,7 @@ export async function postExpense(tx) {
     const cashAccount = await requireAccount({ code: CASH_ACCOUNT_CODE }, `expense ${tx.id}`);
     const amountUSD = tx.amountUSD ?? tx.amount;
     const currencyOpts = { currency: tx.currency, exchangeRateToUSD: tx.exchangeRateToUSD, entityId: tx.consultantId || '' };
-    return JournalEntry.create({
+    return createJournalEntryIdempotent({
         date: tx.dateObj || new Date(tx.date),
         memo: tx.title,
         source: 'expense',
@@ -99,7 +133,7 @@ export async function postConsultantPayment(tx) {
     const laborAccount = await requireAccount({ code: CATEGORY_TO_ACCOUNT_CODE.consultant_payment }, `consultant payment ${tx.id}`);
     const cashAccount = await requireAccount({ code: CASH_ACCOUNT_CODE }, `consultant payment ${tx.id}`);
     const amountUSD = tx.amountUSD ?? tx.amount;
-    return JournalEntry.create({
+    return createJournalEntryIdempotent({
         date: tx.dateObj || new Date(tx.date),
         memo: tx.title,
         source: 'payroll',
@@ -118,7 +152,7 @@ export async function postPaymentReceived(payment) {
     const cashAccount = await requireAccount({ code: CASH_ACCOUNT_CODE }, `payment ${sourceId}`);
     const incomeAccount = await requireAccount({ code: INCOME_ACCOUNT_CODE }, `payment ${sourceId}`);
     const currencyOpts = { currency: payment.currency, exchangeRateToUSD: payment.exchangeRateToUSD, entityId: payment.clientId };
-    return JournalEntry.create({
+    return createJournalEntryIdempotent({
         date: payment.paymentDate,
         memo: `Payment from ${payment.clientName}`,
         source: 'payment',
@@ -137,7 +171,7 @@ export async function postCommissionPaid(commission) {
     const laborAccount = await requireAccount({ code: CATEGORY_TO_ACCOUNT_CODE.consultant_payment }, `commission ${sourceId}`);
     const cashAccount = await requireAccount({ code: CASH_ACCOUNT_CODE }, `commission ${sourceId}`);
     const amountUSD = commission.paidAmountUSD || commission.amountUSD;
-    return JournalEntry.create({
+    return createJournalEntryIdempotent({
         date: new Date(),
         memo: `Commission — ${commission.projectName}`,
         source: 'commission',

@@ -4,8 +4,13 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
 import { setupTestDB, teardownTestDB, clearLedgerCollections, seedChartOfAccounts } from './setup.js';
-import mercuryReconciliationRouter from '../../server/routes/mercuryReconciliation.js';
+import mercuryReconciliationRouter, { createMercuryReconciliationRouter } from '../../server/routes/mercuryReconciliation.js';
 import JournalEntry from '../../server/models/JournalEntry.js';
+import MercuryTransaction from '../../server/models/MercuryTransaction.js';
+import Transaction from '../../server/models/Transaction.js';
+import LedgerAccount from '../../server/models/LedgerAccount.js';
+import LedgerPeriodClose from '../../server/models/LedgerPeriodClose.js';
+import { DEFAULT_CHART_OF_ACCOUNTS } from '../../server/seed/chartOfAccounts.js';
 
 const app = express();
 app.use(express.json());
@@ -160,5 +165,701 @@ describe('POST /api/mercury-import/confirm-match', () => {
 
     assert.equal(({}).reconciled, undefined);
     assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, 'reconciled'), false);
+  });
+});
+
+describe('GET /api/mercury-import/accounts', () => {
+  it('returns the accounts the injected Mercury client resolves', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListAccounts: async () => [{ id: 'acc_1', name: 'Checking', type: 'checking' }],
+    }));
+
+    const res = await request(testApp).get('/api/mercury-import/accounts');
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, [{ id: 'acc_1', name: 'Checking', type: 'checking' }]);
+  });
+
+  it('returns 502 when the Mercury client throws', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListAccounts: async () => { throw new Error('Mercury API /accounts failed: 401 unauthorized'); },
+    }));
+
+    const res = await request(testApp).get('/api/mercury-import/accounts');
+    assert.equal(res.status, 502);
+    assert.match(res.body.error, /Mercury API/);
+  });
+});
+
+describe('POST /api/mercury-import/sync', () => {
+  function buildApp(mercuryListTransactions: (...args: any[]) => Promise<any[]>) {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({ mercuryListTransactions }));
+    return testApp;
+  }
+
+  it('rejects a request with no accountId', async () => {
+    const testApp = buildApp(async () => []);
+    const res = await request(testApp).post('/api/mercury-import/sync').send({});
+    assert.equal(res.status, 400);
+  });
+
+  it('rejects an accountId containing path-traversal / URL-control characters instead of forwarding it to the Mercury client', async () => {
+    let called = false;
+    const testApp = buildApp(async () => { called = true; return []; });
+    const res = await request(testApp).post('/api/mercury-import/sync')
+      .send({ accountId: '../accounts?foo=bar#x' });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'Invalid accountId');
+    assert.equal(called, false, 'the Mercury client must never be called with an unvalidated accountId');
+  });
+
+  it('persists fetched transactions into MercuryTransaction and reconciles them like the CSV path', async () => {
+    await JournalEntry.create({
+        date: new Date('2026-07-01'), source: 'expense',
+        lines: [
+            { accountId: 'coa_6300', debit: 500, amountUSD: 500 },
+            { accountId: 'coa_1000', credit: 500, amountUSD: 500 },
+        ],
+    });
+    const testApp = buildApp(async () => [
+      { id: 'tx_1', amount: -500, status: 'sent', postedAt: '2026-07-01', description: 'AWS Hosting', counterpartyName: 'AWS' },
+    ]);
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1', start: '2026-07-01', end: '2026-07-31' });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.matched.length, 1);
+
+    const stored = await MercuryTransaction.find({ mercuryAccountId: 'acc_1' }).lean();
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].mercuryTransactionId, 'tx_1');
+    assert.equal(stored[0].amount, -500);
+  });
+
+  it('syncing an overlapping range twice does not duplicate persisted transactions', async () => {
+    const fetchTx = [
+      { id: 'tx_1', amount: -25, status: 'sent', postedAt: '2026-07-01', description: 'Fee', counterpartyName: 'Bank' },
+    ];
+    const testApp = buildApp(async () => fetchTx);
+
+    await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+    await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    const stored = await MercuryTransaction.find({ mercuryAccountId: 'acc_1' }).lean();
+    assert.equal(stored.length, 1);
+  });
+
+  it('returns 502 when the Mercury client throws', async () => {
+    const testApp = buildApp(async () => { throw new Error('Mercury API /account/acc_1/transactions failed: 500'); });
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+    assert.equal(res.status, 502);
+    assert.match(res.body.error, /Mercury API/);
+  });
+
+  // Regression test: a failure AFTER the Mercury fetch succeeds (our own DB
+  // write, or reconcileRows' own logic) is an internal error, not an
+  // upstream one — it must surface as 500, not the 502 reserved for a
+  // verified Mercury API failure, or triage gets pointed at the wrong system.
+  it('returns 500 (not 502) when the failure happens after a successful Mercury fetch', async () => {
+    await LedgerAccount.deleteOne({ code: '1000' }); // Cash account — reconcileRows requires it
+    const testApp = buildApp(async () => [
+      { id: 'tx_1', amount: -25, status: 'sent', postedAt: '2026-07-01', description: 'Fee', counterpartyName: 'Bank' },
+    ]);
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+    assert.equal(res.status, 500);
+    assert.match(res.body.error, /Cash account not seeded/);
+  });
+});
+
+describe('POST /api/mercury-import/sync — category suggestion on missing rows', () => {
+  it('attaches mercuryTransactionId and mercurySuggestedTaxCategory to a missing row from a sync', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_1', amount: -1000, status: 'sent', postedAt: '2026-07-01', description: 'Payroll run', counterpartyNickname: 'Andres', categoryData: { name: 'Payroll' } },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.missing.length, 1);
+    assert.equal(res.body.missing[0].bankRow.mercuryTransactionId, 'tx_1');
+    assert.equal(res.body.missing[0].bankRow.mercurySuggestedTaxCategory, 'Contract Labor');
+  });
+
+  it('falls back to Other Expenses when categoryData is absent', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_2', amount: -50, status: 'sent', postedAt: '2026-07-01', description: 'Unknown charge' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.mercurySuggestedTaxCategory, 'Other Expenses');
+  });
+
+  it('persists mercuryCategoryName, kind, and counterpartyNickname on the stored MercuryTransaction', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_3', amount: -20, status: 'sent', postedAt: '2026-07-01', description: 'Fee', kind: 'creditCardTransaction', counterpartyNickname: 'Vendor X', categoryData: { name: 'Bank Fees' } },
+      ],
+    }));
+
+    await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    const stored = await MercuryTransaction.findOne({ mercuryTransactionId: 'tx_3' }).lean();
+    assert.equal(stored?.mercuryCategoryName, 'Bank Fees');
+    assert.equal(stored?.kind, 'creditCardTransaction');
+    assert.equal(stored?.counterpartyNickname, 'Vendor X');
+  });
+
+  it('builds Description from counterpartyNickname, not the nonexistent "description" field Mercury never sends', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        // Real Mercury transactions never carry a top-level "description" field
+        // (verified against a live API response) — only bankDescription,
+        // counterpartyName, and counterpartyNickname. Deliberately omitting
+        // "description" here to prove the fix doesn't depend on it.
+        { id: 'tx_desc_1', amount: -50, status: 'sent', postedAt: '2026-07-01', counterpartyNickname: 'Andres Incoda', counterpartyName: 'Reinaldo Andrés Jaimes Muñoz', bankDescription: 'Send Money transaction initiated on Mercury' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Description, 'Andres Incoda');
+    const stored = await MercuryTransaction.findOne({ mercuryTransactionId: 'tx_desc_1' }).lean();
+    assert.equal(stored?.description, 'Andres Incoda');
+  });
+
+  it('falls back to counterpartyName, then bankDescription, when counterpartyNickname is absent', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_desc_2', amount: -30, status: 'sent', postedAt: '2026-07-01', counterpartyName: 'Amazon Web Services', bankDescription: 'Some generic bank text' },
+        { id: 'tx_desc_3', amount: -5, status: 'sent', postedAt: '2026-07-01', bankDescription: 'Intl. Transaction Fee' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    const byId = (id: string) => res.body.missing.find((m: any) => m.bankRow.mercuryTransactionId === id);
+    assert.equal(byId('tx_desc_2').bankRow.Description, 'Amazon Web Services');
+    assert.equal(byId('tx_desc_3').bankRow.Description, 'Intl. Transaction Fee');
+  });
+
+  it('renders Date as a plain date (not a raw ISO timestamp) even when falling back to createdAt', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_pending', amount: -100, status: 'pending', postedAt: null, createdAt: '2026-07-27T17:49:05.436430Z', counterpartyNickname: 'Vendor' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Date, '2026-07-27');
+  });
+
+  it('combines counterparty and Mercury note as "Counterparty — Note" when both are present', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_note_1', amount: -106.34, status: 'sent', postedAt: '2026-08-20', counterpartyNickname: 'Bold Sa*grupo Pa', note: 'Cena cliente Cartagena' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Description, 'Bold Sa*grupo Pa — Cena cliente Cartagena');
+    const stored = await MercuryTransaction.findOne({ mercuryTransactionId: 'tx_note_1' }).lean();
+    assert.equal(stored?.note, 'Cena cliente Cartagena');
+  });
+
+  it('uses just the note when there is no counterparty name at all', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_note_2', amount: -5, status: 'sent', postedAt: '2026-08-20', note: 'Solo la nota' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Description, 'Solo la nota');
+  });
+
+  it('omits the note when Mercury sends null (the common case)', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_note_3', amount: -20, status: 'sent', postedAt: '2026-08-20', counterpartyNickname: 'Vendor X', note: null },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.Description, 'Vendor X');
+  });
+
+  it('does not attach mercuryTransactionId to a missing row from the CSV path', async () => {
+    const csv = 'Date,Description,Amount\n2026-07-01,Unrecorded Fee,-25.00\n';
+    const res = await request(app).post('/api/mercury-import').send({ csv });
+    assert.equal(res.body.missing.length, 1);
+    assert.equal(res.body.missing[0].bankRow.mercuryTransactionId, undefined);
+    assert.equal(res.body.missing[0].bankRow.mercurySuggestedTaxCategory, undefined);
+  });
+
+  it('attaches dashboardLink to a missing row and persists it on the stored MercuryTransaction', async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.use('/api/mercury-import', createMercuryReconciliationRouter({
+      mercuryListTransactions: async () => [
+        { id: 'tx_link_1', amount: -40, status: 'sent', postedAt: '2026-07-01', counterpartyNickname: 'Vendor', dashboardLink: 'https://mercury.com/transactions/tx_link_1' },
+      ],
+    }));
+
+    const res = await request(testApp).post('/api/mercury-import/sync').send({ accountId: 'acc_1' });
+
+    assert.equal(res.body.missing[0].bankRow.dashboardLink, 'https://mercury.com/transactions/tx_link_1');
+    const stored = await MercuryTransaction.findOne({ mercuryTransactionId: 'tx_link_1' }).lean();
+    assert.equal(stored?.dashboardLink, 'https://mercury.com/transactions/tx_link_1');
+  });
+});
+
+describe('POST /api/mercury-import/approve', () => {
+  it('rejects a request with no mercuryTransactionId', async () => {
+    const res = await request(app).post('/api/mercury-import/approve').send({});
+    assert.equal(res.status, 400);
+  });
+
+  it('returns 404 for an unknown mercuryTransactionId', async () => {
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'does-not-exist' });
+    assert.equal(res.status, 404);
+  });
+
+  it('creates a Transaction and posts a JournalEntry for a valid mercuryTransactionId', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_approve_1',
+      amount: -75.5, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Zoom subscription', mercuryCategoryName: 'Office Supplies & Equipment',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_approve_1' });
+
+    assert.equal(res.status, 201);
+    assert.equal(res.body.taxCategory, 'Supplies');
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_approve_1' }).lean();
+    assert.ok(tx);
+    assert.equal(tx?.amount, 75.5);
+    assert.equal(tx?.taxCategory, 'Supplies');
+    assert.equal(tx?.type, 'expense');
+
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_approve_1' }).lean();
+    assert.ok(entry, 'expected a JournalEntry to have been posted automatically');
+  });
+
+  it('approving the same mercuryTransactionId twice is an idempotent no-op, not a duplicate', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_approve_2',
+      amount: -10, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Coffee', mercuryCategoryName: 'Other',
+    });
+
+    const first = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_approve_2' });
+    const second = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_approve_2' });
+
+    assert.equal(first.status, 201);
+    assert.equal(second.status, 200);
+    assert.equal(second.body.alreadyApproved, true);
+
+    const count = await Transaction.countDocuments({ id: 'mercury_tx_approve_2' });
+    assert.equal(count, 1);
+
+    const entryCount = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'mercury_tx_approve_2' });
+    assert.equal(entryCount, 1);
+  });
+
+  // Regression test: the "already approved" response must echo the
+  // taxCategory that was actually persisted on first approval, not whatever
+  // override the second (no-op) request happened to send — the real ledger
+  // entry still reflects the first approval's category.
+  it('an already-approved response reports the persisted taxCategory, not a later override', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_approve_stale_cat',
+      amount: -10, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Flight', mercuryCategoryName: 'Travel & Transportation',
+    });
+
+    const first = await request(app).post('/api/mercury-import/approve')
+      .send({ mercuryTransactionId: 'tx_approve_stale_cat', taxCategory: 'Travel' });
+    assert.equal(first.status, 201);
+    assert.equal(first.body.taxCategory, 'Travel');
+
+    const second = await request(app).post('/api/mercury-import/approve')
+      .send({ mercuryTransactionId: 'tx_approve_stale_cat', taxCategory: 'Utilities' });
+    assert.equal(second.status, 200);
+    assert.equal(second.body.alreadyApproved, true);
+    assert.equal(second.body.taxCategory, 'Travel', 'must report what was actually persisted, not the second request\'s override');
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_approve_stale_cat' }).lean();
+    assert.equal(tx?.taxCategory, 'Travel');
+  });
+
+  // Finding 1: a positive-amount (incoming) Mercury transaction must never be
+  // approved as an expense — see server/routes/mercuryReconciliation.js's sign
+  // guard right after the 404 check.
+  it('rejects approving a positive-amount (incoming) Mercury transaction', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_incoming_1',
+      amount: 5000, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Client payment', mercuryCategoryName: 'Revenue',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_incoming_1' });
+
+    assert.equal(res.status, 400);
+    const tx = await Transaction.findOne({ id: 'mercury_tx_incoming_1' }).lean();
+    assert.equal(tx, null, 'no Transaction should have been created for an incoming transaction');
+  });
+
+  // Finding 2: a still-pending Mercury transaction (postedAt: null) must fall
+  // back to Mercury's own createdAt, persisted as mercuryCreatedAt, instead of
+  // today's date — otherwise the ledger entry is misdated and the row can
+  // never re-match on a later sync.
+  it('falls back to mercuryCreatedAt (not today) when postedAt is null', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_pending_1',
+      amount: -42, status: 'pending', postedAt: null,
+      mercuryCreatedAt: new Date('2026-06-15T00:00:00.000Z'),
+      description: 'Pending charge', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_pending_1' });
+
+    assert.equal(res.status, 201);
+    const tx = await Transaction.findOne({ id: 'mercury_tx_pending_1' }).lean();
+    assert.ok(tx);
+    assert.equal(tx?.date, '2026-06-15');
+    assert.equal(new Date(tx!.dateObj as unknown as string).toISOString().split('T')[0], '2026-06-15');
+  });
+
+  // Finding 3: if ledger posting fails (e.g. a required account is missing),
+  // /approve must not silently return 201 — the Transaction is already
+  // created and kept (never deleted), but the response must signal failure.
+  it('returns 502 when the Transaction is created but ledger posting fails', async () => {
+    // Force postExpense() to fail by removing the Cash account it requires.
+    await LedgerAccount.deleteOne({ code: '1000' });
+
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_fail_1',
+      amount: -30, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Bad posting', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_fail_1' });
+
+    assert.equal(res.status, 502);
+    assert.match(res.body.error, /libro diario/);
+
+    // The Transaction record itself must survive — it's not deleted on a
+    // posting failure, only flagged as not-yet-posted.
+    const tx = await Transaction.findOne({ id: 'mercury_tx_fail_1' }).lean();
+    assert.ok(tx, 'the Transaction must not be deleted after a posting failure');
+
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_fail_1' }).lean();
+    assert.equal(entry, null);
+  });
+
+  // Finding 3: retrying an approval whose posting previously failed must
+  // self-heal — not just return a stale 200 alreadyApproved with no
+  // JournalEntry ever created.
+  it('self-heals on retry after a posting failure: a real JournalEntry gets created', async () => {
+    await LedgerAccount.deleteOne({ code: '1000' });
+
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_fail_2',
+      amount: -15, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Bad posting 2', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const first = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_fail_2' });
+    assert.equal(first.status, 502);
+
+    // Restore the Cash account, then retry the same approval.
+    await LedgerAccount.insertMany([DEFAULT_CHART_OF_ACCOUNTS.find(a => a.code === '1000')]);
+
+    const second = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_fail_2' });
+    assert.equal(second.status, 200);
+    assert.equal(second.body.alreadyApproved, true);
+
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_fail_2' }).lean();
+    assert.ok(entry, 'expected the retry to self-heal by posting the JournalEntry');
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_fail_2' }).lean();
+    assert.equal(tx?.postingStatus, 'posted');
+  });
+
+  it('uses an explicit taxCategory override instead of the suggested one, when provided and valid', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_override_1',
+      amount: -60, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Ambiguous charge', mercuryCategoryName: 'Bank Fees', // would normally suggest Other Expenses
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_override_1', taxCategory: 'Travel' });
+
+    assert.equal(res.status, 201);
+    assert.equal(res.body.taxCategory, 'Travel');
+    const tx = await Transaction.findOne({ id: 'mercury_tx_override_1' }).lean();
+    assert.equal(tx?.taxCategory, 'Travel');
+  });
+
+  it('rejects an invalid taxCategory override with 400, without creating anything', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_override_2',
+      amount: -10, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Charge', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_override_2', taxCategory: 'Not A Real Category' });
+
+    assert.equal(res.status, 400);
+    const tx = await Transaction.findOne({ id: 'mercury_tx_override_2' }).lean();
+    assert.equal(tx, null);
+  });
+
+  // Task 5 review, Finding 4: a truly unexpected error out of
+  // Transaction.create() — not the sign guard, not an invalid taxCategory,
+  // and not the 11000 duplicate-key retry path — must still surface as a
+  // genuine 500, never get misclassified as the 502 reserved for a verified
+  // ledger-posting failure. approveOne's final catch branch returns an
+  // explicit httpStatus: 500 for exactly this case; before this test, no
+  // test exercised it. Force Transaction.create() itself to reject with a
+  // non-11000 error using the same static-method monkeypatch pattern
+  // tests/ledger/postingHooks.test.ts already uses, restoring the original
+  // afterward so no other test is affected.
+  it('returns 500 (not 502) when Transaction.create() fails with a genuinely unexpected error', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_unexpected_1',
+      amount: -20, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Weird failure', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const originalCreate = Transaction.create;
+    Transaction.create = (async () => { throw new Error('simulated unexpected Mongo write failure'); }) as typeof Transaction.create;
+
+    let res;
+    try {
+      res = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_unexpected_1' });
+    } finally {
+      Transaction.create = originalCreate;
+    }
+
+    assert.equal(res.status, 500);
+    assert.notEqual(res.status, 502, 'a genuinely unexpected error must not be misclassified as a known posting failure');
+    assert.equal(res.body.error, 'simulated unexpected Mongo write failure');
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_unexpected_1' }).lean();
+    assert.equal(tx, null, 'Transaction.create was mocked to reject — nothing should have been persisted');
+  });
+});
+
+describe('POST /api/mercury-import/unapprove', () => {
+  it('rejects a request with no mercuryTransactionId', async () => {
+    const res = await request(app).post('/api/mercury-import/unapprove').send({});
+    assert.equal(res.status, 400);
+  });
+
+  it('returns 404 when the Mercury transaction was never approved (no Transaction exists)', async () => {
+    const res = await request(app).post('/api/mercury-import/unapprove').send({ mercuryTransactionId: 'never-approved' });
+    assert.equal(res.status, 404);
+  });
+
+  it('voids the JournalEntry and deletes the Transaction on a successful undo', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_undo_1',
+      amount: -80, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Undo me', mercuryCategoryName: 'Bank Fees',
+    });
+    const approveRes = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_undo_1' });
+    assert.equal(approveRes.status, 201);
+
+    const res = await request(app).post('/api/mercury-import/unapprove').send({ mercuryTransactionId: 'tx_undo_1' });
+    assert.equal(res.status, 200);
+
+    const tx = await Transaction.findOne({ id: 'mercury_tx_undo_1' }).lean();
+    assert.equal(tx, null, 'the synthetic Transaction should be deleted');
+
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_undo_1' }).lean();
+    assert.ok(entry, 'the JournalEntry itself must never be hard-deleted');
+    assert.equal(entry?.status, 'void');
+  });
+
+  it('refuses to undo an approval whose accounting period is already closed', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_undo_closed',
+      amount: -50, status: 'sent', postedAt: new Date('2026-06-10'),
+      description: 'In a closed period', mercuryCategoryName: 'Bank Fees',
+    });
+    const approveRes = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_undo_closed' });
+    assert.equal(approveRes.status, 201);
+
+    await LedgerPeriodClose.create({ id: 'close_2026_06', year: 2026, month: 6 });
+
+    const res = await request(app).post('/api/mercury-import/unapprove').send({ mercuryTransactionId: 'tx_undo_closed' });
+    assert.equal(res.status, 409);
+
+    // Nothing should have been touched.
+    const tx = await Transaction.findOne({ id: 'mercury_tx_undo_closed' }).lean();
+    assert.ok(tx, 'the Transaction must survive a refused undo');
+    const entry = await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_undo_closed' }).lean();
+    assert.equal(entry?.status, 'posted');
+  });
+
+  it('lets a freshly re-approved transaction post a brand-new JournalEntry after undo (not a stale "already approved")', async () => {
+    await MercuryTransaction.create({
+      mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_reapprove_1',
+      amount: -25, status: 'sent', postedAt: new Date('2026-07-05'),
+      description: 'Approve, undo, approve again', mercuryCategoryName: 'Bank Fees',
+    });
+
+    const firstApprove = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_reapprove_1' });
+    assert.equal(firstApprove.status, 201);
+
+    await request(app).post('/api/mercury-import/unapprove').send({ mercuryTransactionId: 'tx_reapprove_1' });
+
+    const secondApprove = await request(app).post('/api/mercury-import/approve').send({ mercuryTransactionId: 'tx_reapprove_1' });
+    assert.equal(secondApprove.status, 201, 'a re-approval after undo must post fresh, not be treated as a stale duplicate');
+    assert.equal(secondApprove.body.alreadyApproved, undefined);
+
+    const postedEntries = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'mercury_tx_reapprove_1', status: 'posted' });
+    assert.equal(postedEntries, 1);
+    const voidEntries = await JournalEntry.countDocuments({ source: 'expense', sourceId: 'mercury_tx_reapprove_1', status: 'void' });
+    assert.equal(voidEntries, 1);
+  });
+});
+
+describe('POST /api/mercury-import/approve-many', () => {
+  it('rejects a request with no items array', async () => {
+    const res = await request(app).post('/api/mercury-import/approve-many').send({});
+    assert.equal(res.status, 400);
+  });
+
+  it('rejects a request with more than 100 items', async () => {
+    const items = Array.from({ length: 101 }, (_, i) => ({ mercuryTransactionId: `tx_${i}` }));
+    const res = await request(app).post('/api/mercury-import/approve-many').send({ items });
+    assert.equal(res.status, 400);
+  });
+
+  it('approves every item in a batch, each with its own taxCategory', async () => {
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_1', amount: -10, status: 'sent', postedAt: new Date('2026-07-05'), description: 'A', mercuryCategoryName: 'Bank Fees' });
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_2', amount: -20, status: 'sent', postedAt: new Date('2026-07-06'), description: 'B', mercuryCategoryName: 'Payroll' });
+
+    const res = await request(app).post('/api/mercury-import/approve-many').send({
+      items: [
+        { mercuryTransactionId: 'tx_bulk_1', taxCategory: 'Travel' },
+        { mercuryTransactionId: 'tx_bulk_2' }, // no override — uses suggested (Contract Labor)
+      ],
+    });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.results.length, 2);
+    const r1 = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_1');
+    const r2 = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_2');
+    assert.equal(r1.status, 'approved');
+    assert.equal(r1.taxCategory, 'Travel');
+    assert.equal(r2.status, 'approved');
+    assert.equal(r2.taxCategory, 'Contract Labor');
+
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_1' }).lean());
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_2' }).lean());
+  });
+
+  it('reports a per-item error without blocking the rest of the batch', async () => {
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_3', amount: -30, status: 'sent', postedAt: new Date('2026-07-05'), description: 'C', mercuryCategoryName: 'Bank Fees' });
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_incoming', amount: 500, status: 'sent', postedAt: new Date('2026-07-05'), description: 'Incoming', mercuryCategoryName: 'Revenue' });
+
+    const res = await request(app).post('/api/mercury-import/approve-many').send({
+      items: [
+        { mercuryTransactionId: 'tx_bulk_3' },
+        { mercuryTransactionId: 'tx_bulk_incoming' }, // positive amount — must fail its own sign guard
+      ],
+    });
+
+    assert.equal(res.status, 200);
+    const ok = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_3');
+    const failed = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_incoming');
+    assert.equal(ok.status, 'approved');
+    assert.equal(failed.status, 'error');
+    assert.ok(failed.error);
+
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_3' }).lean());
+    assert.equal(await Transaction.findOne({ id: 'mercury_tx_bulk_incoming' }).lean(), null);
+  });
+
+  // Task 5 review, Finding 3: the previous partial-failure test above fails
+  // its item at the very first line of approveOne (the sign guard), before
+  // any database work happens — it can't prove a genuine mid-batch DB-layer
+  // exception (thrown inside Transaction.create()'s post-save posting hook)
+  // is contained per-item rather than escaping the loop and corrupting/
+  // aborting the rest of the batch. Force a real posting failure for one
+  // item only: delete both the 'Contract Labor' expense account AND the
+  // 'Other Expenses' account findExpenseAccount() falls back to when no
+  // taxCategory-specific account exists, so a Payroll-suggested item's
+  // Transaction.create() succeeds but its post-save posting hook genuinely
+  // fails to find any expense account to post against. A sibling item
+  // suggesting 'Travel' keeps its own dedicated account (untouched) and
+  // must still post successfully in the same loop.
+  it('a real DB-layer posting failure for one item does not abort or corrupt the rest of the batch', async () => {
+    await LedgerAccount.deleteMany({ code: { $in: ['6100', '7900'] } });
+
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_dbfail', amount: -45, status: 'sent', postedAt: new Date('2026-07-05'), description: 'Payroll run', mercuryCategoryName: 'Payroll' });
+    await MercuryTransaction.create({ mercuryAccountId: 'acc_1', mercuryTransactionId: 'tx_bulk_ok', amount: -12, status: 'sent', postedAt: new Date('2026-07-05'), description: 'Flight', mercuryCategoryName: 'Travel & Transportation' });
+
+    const res = await request(app).post('/api/mercury-import/approve-many').send({
+      items: [
+        { mercuryTransactionId: 'tx_bulk_dbfail' },
+        { mercuryTransactionId: 'tx_bulk_ok' },
+      ],
+    });
+
+    assert.equal(res.status, 200);
+    const failed = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_dbfail');
+    const ok = res.body.results.find((r: any) => r.mercuryTransactionId === 'tx_bulk_ok');
+
+    assert.equal(failed.status, 'error');
+    assert.ok(failed.error);
+    assert.equal(ok.status, 'approved');
+
+    // The succeeding sibling item genuinely posted — real Transaction and
+    // JournalEntry both exist for it.
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_ok' }).lean());
+    assert.ok(await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_bulk_ok' }).lean());
+
+    // The failing item's Transaction is still created (posting failed, but
+    // the record itself is kept — same contract as the single-item /approve
+    // posting-failure test), yet it has no JournalEntry.
+    assert.ok(await Transaction.findOne({ id: 'mercury_tx_bulk_dbfail' }).lean());
+    assert.equal(await JournalEntry.findOne({ source: 'expense', sourceId: 'mercury_tx_bulk_dbfail' }).lean(), null);
   });
 });
